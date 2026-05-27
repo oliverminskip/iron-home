@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="Iron Home"/>
+  <meta name="theme-color" content="#f5f4f0"/>
+  <title>Iron Home</title>
+
+  <!-- ── FIREBASE ── -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    // ════════════════════════════════════════════════════
+    // 🔧 PASTE YOUR FIREBASE CONFIG HERE
+    // ════════════════════════════════════════════════════
+    const firebaseConfig = {
+      apiKey:            "YOUR_API_KEY",
+      authDomain:        "YOUR_PROJECT.firebaseapp.com",
+      projectId:         "YOUR_PROJECT_ID",
+      storageBucket:     "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId:             "YOUR_APP_ID"
+    };
+    // ════════════════════════════════════════════════════
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+    window._db = db;
+
+    // Expose Firestore helpers globally for the app
+    window._fs = { doc, getDoc, setDoc, deleteDoc, collection, getDocs };
+
+    // Signal app that Firebase is ready
+    window.dispatchEvent(new Event("firebase-ready"));
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      font-family: 'Courier New', Courier, monospace;
+      background: #f5f4f0;
+      color: #1a1814;
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+    }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type=number] { -moz-appearance: textfield; }
+    button { cursor: pointer; font-family: inherit; }
+
+    /* ── LAYOUT ── */
+    #app { max-width: 600px; margin: 0 auto; padding-bottom: 100px; }
+
+    /* ── HEADER ── */
+    .header {
+      padding: 22px 16px 14px;
+      border-bottom: 1.5px solid #ddd9d0;
+      background: #fff;
+      position: sticky; top: 0; z-index: 50;
+    }
+    .header-top { display:flex; justify-content:space-between; align-items:flex-end; }
+    .header-eyebrow { font-size:9px; letter-spacing:4px; color:#9a9690; margin-bottom:3px; text-transform:uppercase; }
+    .header-title { font-size:26px; font-weight:700; font-family:Georgia,serif; font-style:italic; }
+    .header-sub { font-size:11px; color:#9a9690; margin-top:1px; }
+    .header-sets { text-align:right; }
+    .header-sets-num { font-size:22px; font-weight:700; }
+    .header-sets-label { font-size:9px; color:#9a9690; letter-spacing:1px; text-transform:uppercase; }
+
+    /* ── TABS ── */
+    .tabs { display:flex; background:#fff; border-bottom:1.5px solid #ddd9d0; }
+    .tab-btn {
+      padding:12px 18px; background:none; border:none;
+      border-bottom:3px solid transparent;
+      font-size:11px; letter-spacing:2px; text-transform:uppercase; font-weight:700;
+      color:#9a9690; transition:color .15s;
+    }
+    .tab-btn.active { border-bottom-color: var(--accent, #c8960a); color: var(--accent, #c8960a); }
+
+    /* ── DAY PICKER ── */
+    .day-picker { display:flex; gap:8px; padding:14px 14px 0; background:#fff; border-bottom:1px solid #e8e4dc; }
+    .day-btn {
+      flex:1; padding:10px 4px; border-radius:10px; border:1.5px solid #ddd9d0;
+      background:#f5f4f0; color:#5a5650; font-size:10px; font-weight:800;
+      letter-spacing:1px; text-transform:uppercase; transition:all .12s;
+      position:relative;
+    }
+    .day-btn.active { color:#fff; }
+    .day-btn .day-emoji { font-size:18px; margin-bottom:3px; }
+    .day-dot {
+      position:absolute; top:5px; right:5px; width:7px; height:7px;
+      border-radius:50%; background:#2a7a3a;
+    }
+
+    /* ── DAY HEADER ── */
+    .day-header { padding:12px 14px 8px; background:#fff; border-bottom:1px solid #e8e4dc; }
+    .day-title { font-size:20px; font-weight:700; font-family:Georgia,serif; font-style:italic; }
+    .day-subtitle { font-size:11px; color:#9a9690; margin-top:2px; text-transform:uppercase; letter-spacing:.5px; }
+    .prev-badge {
+      display:inline-block; margin-top:6px; font-size:11px; color:#1a5fa8;
+      background:#eaf2fb; border:1px solid #b0d4f0; border-radius:6px; padding:5px 10px; font-weight:600;
+    }
+    .finished-badge { font-size:11px; color:#2a7a3a; font-weight:600; }
+
+    /* ── WARMUP BOX ── */
+    .warmup-box {
+      margin:12px 14px 8px; background:#fff8ec; border:1px solid #e8c870;
+      border-left:4px solid #c8960a; border-radius:10px; padding:11px 14px;
+    }
+    .warmup-title { font-size:10px; letter-spacing:1.5px; color:#a07020; text-transform:uppercase; margin-bottom:7px; font-weight:700; }
+    .warmup-item { font-size:13px; color:#5a5650; margin-bottom:4px; }
+    .warmup-arrow { color:#c8960a; margin-right:6px; }
+
+    /* ── RPT NOTE ── */
+    .rpt-note {
+      margin:0 14px 10px; background:#fef9e8; border:1px solid #e0c040;
+      border-radius:10px; padding:9px 14px;
+    }
+    .rpt-note-title { font-size:11px; color:#8a6a00; font-weight:700; margin-bottom:2px; }
+    .rpt-note-body  { font-size:12px; color:#5a5650; line-height:1.6; }
+
+    /* ── EXERCISE CARD ── */
+    .ex-card {
+      background:#fff; border:1.5px solid #ddd9d0; border-left:4px solid #ddd9d0;
+      border-radius:12px; margin-bottom:10px; overflow:hidden;
+      box-shadow:0 1px 3px rgba(0,0,0,.04); transition:border-color .15s;
+    }
+    .ex-card.open { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+    .ex-header {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:14px 16px; cursor:pointer; user-select:none;
+    }
+    .ex-name { font-size:16px; font-weight:700; font-family:Georgia,serif; margin-bottom:5px; }
+    .ex-status-done  { font-size:12px; color:#2a7a3a; font-weight:600; margin-left:8px; }
+    .ex-status-prog  { font-size:12px; color:#a06000; font-weight:600; margin-left:8px; }
+    .ex-toggle { font-size:22px; color:#9a9690; line-height:1; }
+    .ex-body { padding:0 16px 16px; }
+
+    /* ── TYPE TAG ── */
+    .tag {
+      display:inline-block; font-size:10px; letter-spacing:1px; text-transform:uppercase;
+      padding:3px 8px; border-radius:4px; border:1px solid; font-weight:600;
+    }
+
+    /* ── WARMUP SETS TABLE ── */
+    .wu-table { background:#fff8ec; border:1px solid #e8c870; border-radius:8px; padding:10px 12px; margin-bottom:14px; }
+    .wu-table-title { font-size:10px; letter-spacing:1.5px; color:#a07020; text-transform:uppercase; margin-bottom:8px; font-weight:700; }
+    .wu-row { display:grid; grid-template-columns:52px 60px 60px 1fr; gap:6px; padding:5px 0; }
+    .wu-row + .wu-row { border-top:1px solid #f0e0b0; }
+    .wu-label { font-size:12px; color:#a07020; font-weight:700; }
+    .wu-pct   { font-size:12px; color:#5a5650; }
+    .wu-reps  { font-size:12px; color:#1a1814; }
+    .wu-rest  { font-size:11px; color:#9a9690; }
+
+    /* ── WORKING SET HEADERS ── */
+    .ws-col-headers { display:grid; grid-template-columns:52px 1fr 78px 78px; gap:6px; padding:4px 0 2px; }
+    .ws-col-h { font-size:9px; letter-spacing:1.5px; color:#9a9690; text-transform:uppercase; font-weight:600; }
+
+    /* ── SET ROW ── */
+    .set-row { border-bottom:1px solid #e8e4dc; padding:10px 0; }
+    .set-row.has-entry { background:#f0faf2; margin:0 -16px; padding:10px 16px; }
+    .set-row-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
+    .set-label  { font-size:13px; font-weight:700; min-width:52px; }
+    .set-target { font-size:13px; color:#5a5650; }
+    .set-target strong { color:#1a1814; }
+    .set-rest   { font-size:11px; color:#9a9690; margin-left:auto; }
+    .set-inputs { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .set-input {
+      width:78px; background:#f8f6f2; border:1.5px solid #d0ccc4;
+      border-radius:7px; color:#1a1814; font-size:15px; padding:7px 10px;
+      font-family:inherit; outline:none; font-weight:600;
+    }
+    .set-input.filled { border-color:#2a7a3a; }
+    .prev-tag {
+      font-size:11px; color:#1a5fa8; background:#eaf2fb;
+      border:1px solid #b0d4f0; border-radius:4px; padding:2px 8px;
+      white-space:nowrap; font-weight:600;
+    }
+
+    /* ── HIIT ROW ── */
+    .hiit-title { font-size:11px; letter-spacing:1px; color:#904010; text-transform:uppercase; margin-bottom:6px; font-weight:600; }
+    .hiit-row { display:flex; gap:8px; align-items:center; padding:7px 0; border-bottom:1px solid #e8e4dc; }
+    .hiit-label { font-size:13px; font-weight:700; min-width:34px; }
+    .hiit-range { font-size:13px; color:#5a5650; }
+
+    /* ── DROP SET ── */
+    .drop-set { margin-top:10px; font-size:12px; color:#b03030; background:#fff0f0; border:1px solid #f0b0b0; border-radius:7px; padding:9px 12px; font-weight:600; }
+
+    /* ── CUE ── */
+    .cue { margin-top:12px; font-size:12px; color:#5a5650; line-height:1.8; font-style:italic; border-left:3px solid; padding-left:12px; padding-top:2px; }
+
+    /* ── BOTTOM BUTTONS ── */
+    .bottom-btns { padding:16px 14px 0; display:flex; flex-direction:column; gap:10px; }
+    .btn-finish {
+      width:100%; padding:16px; background:#2a7a3a; border:none;
+      border-radius:12px; color:#fff; font-size:16px; font-weight:700;
+      letter-spacing:.5px; box-shadow:0 3px 10px rgba(42,122,58,.25);
+    }
+    .btn-finished-state {
+      width:100%; padding:14px; background:#edf7ef; border:1.5px solid #2a7a3a;
+      border-radius:12px; color:#2a7a3a; font-size:15px; font-weight:700; text-align:center;
+    }
+    .btn-clear {
+      width:100%; padding:12px; background:none; border:1.5px solid #f0b0b0;
+      border-radius:10px; color:#c03030; font-size:13px; font-weight:600;
+    }
+    .btn-clear-confirm { flex:1; padding:12px; background:#c03030; border:none; border-radius:10px; color:#fff; font-size:14px; font-weight:700; }
+    .btn-cancel { flex:1; padding:12px; background:none; border:1.5px solid #ddd9d0; border-radius:10px; color:#5a5650; font-size:14px; }
+    .confirm-row { display:flex; gap:8px; }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.45);
+      display:flex; align-items:center; justify-content:center; z-index:999; padding:24px;
+    }
+    .modal-box {
+      background:#fff; border-radius:16px; padding:28px; max-width:340px; width:100%;
+      box-shadow:0 8px 32px rgba(0,0,0,.18);
+    }
+    .modal-icon { font-size:32px; text-align:center; margin-bottom:8px; }
+    .modal-title { font-size:20px; font-weight:700; font-family:Georgia,serif; text-align:center; margin-bottom:6px; }
+    .modal-body  { font-size:14px; color:#5a5650; text-align:center; margin-bottom:24px; line-height:1.6; }
+    .btn-modal-confirm {
+      width:100%; padding:14px; background:#2a7a3a; border:none;
+      border-radius:10px; color:#fff; font-size:16px; font-weight:700; margin-bottom:10px;
+    }
+    .btn-modal-cancel {
+      width:100%; padding:12px; background:none; border:1.5px solid #ddd9d0;
+      border-radius:10px; color:#5a5650; font-size:14px;
+    }
+
+    /* ── HISTORY ── */
+    .history-wrap { padding:14px; }
+    .history-title { font-size:11px; letter-spacing:2px; color:#9a9690; text-transform:uppercase; margin-bottom:14px; font-weight:600; }
+    .history-empty { padding:32px; text-align:center; color:#9a9690; font-size:15px; line-height:1.8; }
+    .hist-card {
+      background:#fff; border:1.5px solid #ddd9d0; border-left:4px solid;
+      border-radius:12px; margin-bottom:10px; overflow:hidden;
+      box-shadow:0 1px 3px rgba(0,0,0,.05);
+    }
+    .hist-header { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; cursor:pointer; user-select:none; }
+    .hist-day-name { font-size:16px; font-weight:700; font-family:Georgia,serif; font-style:italic; }
+    .hist-date { font-size:12px; color:#9a9690; margin-top:2px; }
+    .hist-body { padding:0 16px 16px; }
+    .hist-ex-name { font-size:13px; font-weight:700; margin-bottom:4px; }
+    .hist-set-row { display:flex; gap:12px; font-size:13px; color:#5a5650; margin-bottom:3px; padding-left:12px; }
+    .hist-set-lbl { color:#9a9690; width:44px; flex-shrink:0; }
+    .hist-kg   { color:#a07000; font-weight:700; }
+    .hist-reps { color:#1a1814; font-weight:700; }
+    .btn-delete     { margin-top:10px; background:none; border:1px solid #f0b0b0; border-radius:6px; color:#c03030; font-size:12px; padding:9px 16px; font-weight:600; }
+    .btn-delete-yes { flex:1; padding:11px; background:#c03030; border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:700; }
+    .btn-delete-no  { flex:1; padding:11px; background:none; border:1.5px solid #ddd9d0; border-radius:8px; color:#5a5650; font-size:13px; }
+
+    /* ── SCHEDULE ── */
+    .schedule-wrap { padding:14px; }
+    .sched-row {
+      display:flex; align-items:center; gap:14px; padding:13px 16px; margin-bottom:8px;
+      background:#fff; border:1.5px solid #ddd9d0; border-left:4px solid;
+      border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.04);
+    }
+    .sched-day { font-size:11px; letter-spacing:2px; text-transform:uppercase; font-weight:700; width:36px; }
+    .sched-session { font-size:14px; font-weight:600; }
+    .sched-rest { font-size:13px; color:#9a9690; font-style:italic; }
+    .sched-emoji { font-size:18px; }
+    .info-box {
+      margin-top:10px; background:#fff; border:1.5px solid #ddd9d0; border-left:4px solid;
+      border-radius:10px; padding:14px 16px;
+    }
+    .info-box-title { font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px; font-weight:700; }
+    .info-box-body  { font-size:13px; color:#5a5650; line-height:1.8; }
+
+    /* ── LOADING ── */
+    #loading { position:fixed; inset:0; background:#f5f4f0; display:flex; align-items:center; justify-content:center; z-index:999; flex-direction:column; gap:12px; }
+    .spinner { width:32px; height:32px; border:3px solid #e0d8c8; border-top-color:#c8960a; border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .loading-txt { font-size:13px; color:#9a9690; letter-spacing:2px; text-transform:uppercase; }
+
+    /* ── TOAST ── */
+    #toast {
+      position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
+      background:#1a1814; color:#fff; padding:12px 24px; border-radius:10px;
+      font-size:13px; font-weight:600; white-space:nowrap; z-index:9999;
+      transition:transform .3s ease; pointer-events:none;
+    }
+    #toast.show { transform:translateX(-50%) translateY(0); }
+
+    /* ── FIREBASE CONFIG WARNING ── */
+    .config-warning {
+      margin:16px 14px; background:#fff3cd; border:1.5px solid #ffc107;
+      border-radius:10px; padding:14px; font-size:13px; color:#856404; line-height:1.7;
+    }
+    .config-warning strong { display:block; margin-bottom:4px; font-size:14px; }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="loading-txt">Loading...</div>
+</div>
+
+<div id="toast"></div>
+
+<div id="app" style="display:none"></div>
+
+<script type="module">
+// ═══════════════════════════════════════════════════════
+// PROGRAM DATA
+// ═══════════════════════════════════════════════════════
+
+const DAYS = [
+  {
+    id:"A", emoji:"💪", name:"PUSH", subtitle:"Chest · Shoulders · Triceps · Abs",
+    accent:"#c8960a", totalTime:"~75 min",
+    warmup:["Arm Circles — 30s each direction","Shoulder Dislocates (towel) — 10 reps","Band Pull-Aparts — 15 reps"],
+    exercises:[
+      {id:"A1",name:"DB Bench Press",type:"RPT",
+        warmupSets:[{label:"WU1",pct:"40%",reps:8,rest:"60s"},{label:"WU2",pct:"60%",reps:5,rest:"60s"},{label:"WU3",pct:"80%",reps:3,rest:"90s → 2 min"}],
+        workingSets:[{label:"Set 1",repRange:"6–8",rest:"3 min"},{label:"Set 2",repRange:"8–10",rest:"2 min"},{label:"Set 3",repRange:"10–12",rest:"→ next"}],
+        cue:"3s eccentric. Don't flare elbows. Full chest stretch at bottom."},
+      {id:"A2",name:"DB Overhead Press (seated)",type:"RPT",
+        warmupSets:[{label:"WU1",pct:"40%",reps:8,rest:"60s"},{label:"WU2",pct:"60%",reps:5,rest:"60s"},{label:"WU3",pct:"80%",reps:3,rest:"90s → 2 min"}],
+        workingSets:[{label:"Set 1",repRange:"6–8",rest:"3 min"},{label:"Set 2",repRange:"8–10",rest:"2 min"},{label:"Set 3",repRange:"10–12",rest:"→ next"}],
+        cue:"Press slightly in front of head. Lead with elbows. Lateral delt focus."},
+      {id:"A3",name:"DB Lateral Raises",type:"Straight",
+        warmupSets:[],dropSet:"Drop to 60% — 10–12 reps immediately, no rest",
+        workingSets:[{label:"Set 1",repRange:"12–15",rest:"60s"},{label:"Set 2",repRange:"12–15",rest:"60s"},{label:"Set 3",repRange:"12–15",rest:"Drop set →"}],
+        cue:"Lead with elbows, pause at top. Shoulder width builder."},
+      {id:"A4",name:"DB Incline Press",type:"Straight",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"8–10",rest:"75s"},{label:"Set 2",repRange:"8–10",rest:"75s"},{label:"Set 3",repRange:"10–12",rest:"→ next"}],
+        cue:"30–45° bench. Full stretch at bottom. Upper chest."},
+      {id:"A5",name:"Overhead DB Tricep Extension",type:"Straight",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"10–12",rest:"60s"},{label:"Set 2",repRange:"10–12",rest:"60s"},{label:"Set 3",repRange:"12–15",rest:"→ abs"}],
+        cue:"Both hands on one DB. Elbows close. Full overhead stretch."},
+      {id:"A6",name:"Hanging Knee Raises",type:"Abs",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"12–15",rest:"60s"},{label:"Set 2",repRange:"12–15",rest:"60s"},{label:"Set 3",repRange:"Max",rest:"done"}],
+        cue:"Dead hang. Drive knees to chest, posterior pelvic tilt at top. No swinging."},
+      {id:"A7",name:"Ab Wheel / Plank",type:"Abs",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"8–10 / 45s",rest:"60s"},{label:"Set 2",repRange:"8–10 / 45s",rest:"60s"},{label:"Set 3",repRange:"Max / 60s",rest:"done"}],
+        cue:"Ab wheel: go as far as you can without hips dropping. Plank if no wheel."},
+    ]
+  },
+  {
+    id:"B", emoji:"🔱", name:"PULL", subtitle:"Back · Biceps · Rear Delts",
+    accent:"#1a7fa8", totalTime:"~75 min",
+    warmup:["Scapular Pull-Ups (dead hang shrug) — 10 reps","Dead Hang — 30–45s","Band Pull-Aparts — 15 reps","Arm Circles — 30s each"],
+    exercises:[
+      {id:"B1",name:"Weighted Pull-Ups (wide)",type:"RPT",
+        warmupSets:[{label:"WU1",pct:"BW",reps:5,rest:"60s"},{label:"WU2",pct:"BW+light",reps:3,rest:"90s → 2 min"}],
+        workingSets:[{label:"Set 1",repRange:"4–6",rest:"3 min"},{label:"Set 2",repRange:"6–8",rest:"3 min"},{label:"Set 3",repRange:"8–10",rest:"→ next"}],
+        cue:"Dead hang start. Pull elbows to hips. Pause chin over bar. KING of the program."},
+      {id:"B2",name:"Weighted Chin-Ups (supinated)",type:"RPT",
+        warmupSets:[{label:"WU1",pct:"BW",reps:4,rest:"60s → 90s"}],
+        workingSets:[{label:"Set 1",repRange:"5–7",rest:"3 min"},{label:"Set 2",repRange:"7–9",rest:"→ next"}],
+        cue:"Palms facing you. Full dead hang. Bicep peak and back together."},
+      {id:"B3",name:"DB Bent-Over Row (1 arm)",type:"RPT",
+        warmupSets:[{label:"WU1",pct:"40%",reps:8,rest:"60s"},{label:"WU2",pct:"65%",reps:5,rest:"90s → 2 min"}],
+        workingSets:[{label:"Set 1",repRange:"6–8 each",rest:"3 min"},{label:"Set 2",repRange:"8–10 each",rest:"2 min"},{label:"Set 3",repRange:"10–12 each",rest:"→ next"}],
+        cue:"Pull to hip, not chest. Think elbow. Squeeze hard, 2s lower."},
+      {id:"B4",name:"DB Rear Delt Fly",type:"Straight",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"12–15",rest:"60s"},{label:"Set 2",repRange:"12–15",rest:"60s"},{label:"Set 3",repRange:"15–20",rest:"→ next"}],
+        cue:"Near-parallel torso. Lead with elbows to ear height. Upper back thickness."},
+      {id:"B5",name:"DB Hammer Curl",type:"Straight",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"10–12",rest:"60s"},{label:"Set 2",repRange:"10–12",rest:"60s"},{label:"Set 3",repRange:"12",rest:"→ next"}],
+        cue:"Neutral grip, elbows pinned. Brachialis = arm thickness."},
+      {id:"B6",name:"DB Incline Curl",type:"Straight",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"10–12 each",rest:"60s"},{label:"Set 2",repRange:"10–12 each",rest:"done"}],
+        cue:"Bench at 60°. Arms hang behind body. Long head peak builder."},
+    ]
+  },
+  {
+    id:"C", emoji:"🦵", name:"LEGS + ARMS", subtitle:"Quads · Hams · Glutes · Biceps · Triceps · Abs",
+    accent:"#b83030", totalTime:"~90 min",
+    warmup:["Leg Swings — 10 each leg","Hip Circles — 10 each direction","BW Squat — 15 reps slow","Glute Bridge — 15 reps","Walking Lunge — 10 steps"],
+    exercises:[
+      {id:"C1",name:"DB Goblet Squat",type:"Straight",
+        warmupSets:[{label:"WU1",pct:"Light",reps:10,rest:"60s"}],
+        workingSets:[{label:"Set 1",repRange:"12–15",rest:"90s"},{label:"Set 2",repRange:"12–15",rest:"90s"},{label:"Set 3",repRange:"12–15",rest:"90s"},{label:"Set 4",repRange:"15–20",rest:"→ next"}],
+        cue:"Full depth. Heels slightly elevated if needed. Knees out."},
+      {id:"C2",name:"DB Romanian Deadlift",type:"RPT",
+        warmupSets:[{label:"WU1",pct:"40%",reps:8,rest:"60s"},{label:"WU2",pct:"60%",reps:5,rest:"60s"},{label:"WU3",pct:"80%",reps:3,rest:"90s → 2 min"}],
+        workingSets:[{label:"Set 1",repRange:"8–10",rest:"3 min"},{label:"Set 2",repRange:"10–12",rest:"2 min"},{label:"Set 3",repRange:"12–15",rest:"→ next"}],
+        cue:"Hip hinge, push hips BACK. Full hamstring stretch at bottom."},
+      {id:"C3",name:"DB Bulgarian Split Squat",type:"Straight",
+        warmupSets:[{label:"WU1",pct:"BW/light",reps:8,rest:"60s"}],
+        workingSets:[{label:"Set 1",repRange:"10–12 each",rest:"90s"},{label:"Set 2",repRange:"10–12 each",rest:"90s"},{label:"Set 3",repRange:"10–12 each",rest:"→ next"}],
+        cue:"Rear foot elevated. Descend straight down. Best single-leg exercise."},
+      {id:"C4",name:"Standing DB Calf Raise",type:"Straight",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"15–20",rest:"60s"},{label:"Set 2",repRange:"15–20",rest:"60s"},{label:"Set 3",repRange:"15–20",rest:"60s"},{label:"Set 4",repRange:"20+",rest:"→ next"}],
+        cue:"On a step. Full stretch at bottom, pause at top. 2s up, 3s down."},
+      {id:"C5",name:"DB Curl (alternating)",type:"RPT",
+        warmupSets:[{label:"WU1",pct:"50%",reps:8,rest:"60s"}],
+        workingSets:[{label:"Set 1",repRange:"6–8 each",rest:"2 min"},{label:"Set 2",repRange:"8–10 each",rest:"90s"},{label:"Set 3",repRange:"10–12 each",rest:"→ next"}],
+        cue:"Elbows pinned. Supinate as you curl. 3s lower. Full extension at bottom."},
+      {id:"C6",name:"DB Skull Crushers",type:"RPT",
+        warmupSets:[{label:"WU1",pct:"50%",reps:10,rest:"60s"}],
+        workingSets:[{label:"Set 1",repRange:"8–10",rest:"2 min"},{label:"Set 2",repRange:"10–12",rest:"90s"},{label:"Set 3",repRange:"12–15",rest:"→ abs"}],
+        cue:"Lower to beside ears, not forehead. Keep elbows vertical."},
+      {id:"C7",name:"Concentration Curl",type:"Straight",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"12 each",rest:"60s"},{label:"Set 2",repRange:"12 each",rest:"→ abs"}],
+        cue:"Elbow on thigh. Squeeze 1s at top. Peak contraction builder."},
+      {id:"C8",name:"Weighted Crunch",type:"Abs",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"12–15",rest:"60s"},{label:"Set 2",repRange:"12–15",rest:"60s"},{label:"Set 3",repRange:"Max",rest:"→ next"}],
+        cue:"DB held at chest. Slow contraction. Round the spine. Don't rush."},
+      {id:"C9",name:"Leg Raises (flat bench)",type:"Abs",
+        warmupSets:[],workingSets:[{label:"Set 1",repRange:"12–15",rest:"60s"},{label:"Set 2",repRange:"12–15",rest:"60s"},{label:"Set 3",repRange:"Max",rest:"done"}],
+        cue:"Lie on bench. Raise legs to 90°, lower slow. Posterior tilt at top."},
+    ]
+  },
+  {
+    id:"D", emoji:"🔥", name:"HIIT", subtitle:"Metabolic Conditioning · Fat Accelerator",
+    accent:"#c05a1a", totalTime:"~45 min",
+    warmup:["Light jog in place — 2 min","Jumping Jacks — 30s","Arm Circles — 30s each","BW Squat — 10 reps","Inchworm walkout — 5 reps"],
+    exercises:[
+      {id:"D1",name:"DB Thruster (squat to press)",type:"HIIT",warmupSets:[],
+        workingSets:[{label:"R1",repRange:"40s on / 20s off"},{label:"R2",repRange:"40s on / 20s off"},{label:"R3",repRange:"40s on / 20s off"},{label:"R4",repRange:"40s on / 90s rest"}],
+        cue:"Squat deep, drive up, press overhead. Full body explosive power."},
+      {id:"D2",name:"Renegade Row",type:"HIIT",warmupSets:[],
+        workingSets:[{label:"R1",repRange:"40s on / 20s off"},{label:"R2",repRange:"40s on / 20s off"},{label:"R3",repRange:"40s on / 20s off"},{label:"R4",repRange:"40s on / 90s rest"}],
+        cue:"Push-up position on DBs. Alt rows, hips square. Core on fire."},
+      {id:"D3",name:"DB Swing (KB style)",type:"HIIT",warmupSets:[],
+        workingSets:[{label:"R1",repRange:"40s on / 20s off"},{label:"R2",repRange:"40s on / 20s off"},{label:"R3",repRange:"40s on / 20s off"},{label:"R4",repRange:"40s on / 90s rest"}],
+        cue:"Hip hinge power. Drive with glutes, arms are just ropes."},
+      {id:"D4",name:"Push-Up",type:"HIIT",warmupSets:[],
+        workingSets:[{label:"R1",repRange:"40s on / 20s off"},{label:"R2",repRange:"40s on / 20s off"},{label:"R3",repRange:"40s on / 20s off"},{label:"R4",repRange:"40s on / 90s rest"}],
+        cue:"Full ROM. Elevate feet when easy. Plate on back for harder."},
+      {id:"D5",name:"Burpee",type:"HIIT",warmupSets:[],
+        workingSets:[{label:"R1",repRange:"40s on / 20s off"},{label:"R2",repRange:"40s on / 20s off"},{label:"R3",repRange:"40s on / 20s off"},{label:"R4",repRange:"40s on / 90s rest"}],
+        cue:"Full extension + jump at top. No shortcuts."},
+      {id:"D6",name:"Mountain Climbers",type:"HIIT",warmupSets:[],
+        workingSets:[{label:"R1",repRange:"40s on / 20s off"},{label:"R2",repRange:"40s on / 20s off"},{label:"R3",repRange:"40s on / 20s off"},{label:"R4",repRange:"40s on / done"}],
+        cue:"Hips down, drive knees fast. Empty the tank."},
+    ]
+  }
+];
+
+const SCHEDULE = [
+  {day:"MON",dayId:"A",color:"#c8960a"},{day:"TUE",dayId:null,color:"#bbb"},
+  {day:"WED",dayId:"B",color:"#1a7fa8"},{day:"THU",dayId:null,color:"#bbb"},
+  {day:"FRI",dayId:"C",color:"#b83030"},{day:"SAT",dayId:"D",color:"#c05a1a"},
+  {day:"SUN",dayId:null,color:"#bbb"}
+];
+
+const TYPE_STYLE = {
+  RPT:      {bg:"#fef9e8",border:"#d4a800",text:"#8a6a00"},
+  Straight: {bg:"#f8f6f2",border:"#d0ccc4",text:"#7a7670"},
+  Abs:      {bg:"#f5eeff",border:"#9a60d0",text:"#6a30a8"},
+  HIIT:     {bg:"#fff3ea",border:"#d07030",text:"#904010"},
+};
+
+// ═══════════════════════════════════════════════════════
+// FIREBASE HELPERS
+// ═══════════════════════════════════════════════════════
+
+const USER_ID = "ollie"; // Change this if you want multi-user later
+
+async function fbSaveSession(sessionKey, data) {
+  try {
+    const {doc, setDoc} = window._fs;
+    await setDoc(doc(window._db, "sessions", `${USER_ID}_${sessionKey}`), {data: JSON.stringify(data), updatedAt: Date.now()});
+  } catch(e) { console.error("Firebase save error", e); }
+}
+
+async function fbDeleteSession(sessionKey) {
+  try {
+    const {doc, deleteDoc} = window._fs;
+    await deleteDoc(doc(window._db, "sessions", `${USER_ID}_${sessionKey}`));
+  } catch(e) { console.error("Firebase delete error", e); }
+}
+
+async function fbLoadAllSessions() {
+  try {
+    const {collection, getDocs} = window._fs;
+    const snap = await getDocs(collection(window._db, "sessions"));
+    const log = {};
+    snap.forEach(d => {
+      const key = d.id.replace(`${USER_ID}_`, "");
+      try { log[key] = JSON.parse(d.data().data); } catch {}
+    });
+    return log;
+  } catch(e) { console.error("Firebase load error", e); return {}; }
+}
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+
+let state = {
+  tab: "workout",
+  activeDayId: "A",
+  log: {},           // { "A_2024-06-03": { A1: { 0: {kg,reps}, ... }, finished: true } }
+  openExercises: {}, // { exId: true }
+  showFinishModal: false,
+  confirmClear: false,
+  confirmDeleteKey: null,
+  firebaseReady: false,
+  configMissing: false,
+};
+
+function todayKey() { return new Date().toISOString().slice(0,10); }
+
+// ═══════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════
+
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2500);
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER HELPERS
+// ═══════════════════════════════════════════════════════
+
+function tag(type) {
+  const s = TYPE_STYLE[type] || TYPE_STYLE.Straight;
+  return `<span class="tag" style="background:${s.bg};border-color:${s.border};color:${s.text}">${type}</span>`;
+}
+
+function prevBadge(kg, reps) {
+  if (!kg && !reps) return "";
+  const parts = [];
+  if (kg)   parts.push(`${kg}kg`);
+  if (reps) parts.push(`${reps} reps`);
+  return `<span class="prev-tag">${parts.join(" · ")} ↑prev</span>`;
+}
+
+function renderWarmupTable(sets) {
+  if (!sets.length) return "";
+  const rows = sets.map(s => `
+    <div class="wu-row">
+      <span class="wu-label">${s.label}</span>
+      <span class="wu-pct">${s.pct}</span>
+      <span class="wu-reps">${s.reps} reps</span>
+      <span class="wu-rest">${s.rest}</span>
+    </div>`).join("");
+  return `<div class="wu-table"><div class="wu-table-title">Warm-Up Sets — not logged</div>${rows}</div>`;
+}
+
+function renderSetRow(ws, i, isHiit, prevData, todayData) {
+  if (isHiit) {
+    return `<div class="hiit-row">
+      <span class="hiit-label">${ws.label}</span>
+      <span class="hiit-range">${ws.repRange}</span>
+    </div>`;
+  }
+  const curKg   = todayData?.[i]?.kg   || "";
+  const curReps = todayData?.[i]?.reps || "";
+  const prevKg  = prevData?.[i]?.kg;
+  const prevReps= prevData?.[i]?.reps;
+  const hasEntry = curKg || curReps;
+  return `
+    <div class="set-row${hasEntry?" has-entry":""}">
+      <div class="set-row-top">
+        <span class="set-label">${ws.label}</span>
+        <span class="set-target">Target: <strong>${ws.repRange}</strong></span>
+        ${ws.rest ? `<span class="set-rest">rest: ${ws.rest}</span>` : ""}
+      </div>
+      <div class="set-inputs">
+        <input class="set-input${curKg?" filled":""}" type="number" placeholder="kg"
+          value="${curKg}" inputmode="decimal"
+          onchange="updateSet('${ws._exId}',${i},'kg',this.value)"
+          oninput="updateSet('${ws._exId}',${i},'kg',this.value)"/>
+        <input class="set-input${curReps?" filled":""}" type="number" placeholder="reps"
+          value="${curReps}" inputmode="numeric"
+          onchange="updateSet('${ws._exId}',${i},'reps',this.value)"
+          oninput="updateSet('${ws._exId}',${i},'reps',this.value)"/>
+        ${prevBadge(prevKg, prevReps)}
+      </div>
+    </div>`;
+}
+
+function renderExerciseCard(ex, todaySession, prevSession) {
+  const ts = TYPE_STYLE[ex.type] || TYPE_STYLE.Straight;
+  const isOpen = state.openExercises[ex.id];
+  const isHiit = ex.type === "HIIT";
+  const todayData = todaySession?.[ex.id];
+  const prevData  = prevSession?.[ex.id];
+
+  const loggedCount = ex.workingSets.filter((_,i) => todayData?.[i]?.kg || todayData?.[i]?.reps).length;
+  const allLogged   = loggedCount === ex.workingSets.length && loggedCount > 0;
+
+  const statusBadge = allLogged
+    ? `<span class="ex-status-done">✓ done</span>`
+    : loggedCount > 0
+      ? `<span class="ex-status-prog">${loggedCount}/${ex.workingSets.length} sets</span>`
+      : "";
+
+  let body = "";
+  if (isOpen) {
+    const wuHtml = renderWarmupTable(ex.warmupSets);
+    const colHeaders = isHiit
+      ? `<div class="hiit-title">4 Rounds — 40s on / 20s off</div>`
+      : `<div class="ws-col-headers">
+          <div class="ws-col-h"></div>
+          <div class="ws-col-h">TARGET</div>
+          <div class="ws-col-h">KG</div>
+          <div class="ws-col-h">REPS</div>
+         </div>`;
+    const setsHtml = ex.workingSets.map((ws,i) => renderSetRow({...ws,_exId:ex.id}, i, isHiit, prevData, todayData)).join("");
+    const dropSetHtml = ex.dropSet ? `<div class="drop-set">DROP SET: ${ex.dropSet}</div>` : "";
+    body = `<div class="ex-body">
+      ${wuHtml}
+      ${colHeaders}
+      ${setsHtml}
+      ${dropSetHtml}
+      <div class="cue" style="border-color:${ts.border}">${ex.cue}</div>
+    </div>`;
+  }
+
+  return `<div class="ex-card${isOpen?" open":""}" style="border-left-color:${isOpen?ts.border:"#ddd9d0"}">
+    <div class="ex-header" onclick="toggleEx('${ex.id}')">
+      <div style="flex:1;padding-right:10px">
+        <div class="ex-name">${ex.name}${statusBadge}</div>
+        ${tag(ex.type)}
+      </div>
+      <div class="ex-toggle">${isOpen?"−":"+"}</div>
+    </div>
+    ${body}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER TABS
+// ═══════════════════════════════════════════════════════
+
+function renderWorkout() {
+  const today       = todayKey();
+  const activeDay   = DAYS.find(d => d.id === state.activeDayId);
+  const sessionKey  = `${state.activeDayId}_${today}`;
+  const todaySession= state.log[sessionKey] || {};
+  const isFinished  = !!todaySession.finished;
+
+  // Most recent previous finished session for this day
+  const prevKey = Object.keys(state.log)
+    .filter(k => k.startsWith(`${state.activeDayId}_`) && k !== sessionKey && state.log[k]?.finished)
+    .sort().reverse()[0] || null;
+  const prevSession = prevKey ? state.log[prevKey] : {};
+
+  // Total sets logged today
+  const totalSets = activeDay.exercises
+    .flatMap(ex => ex.workingSets.map((_,i) => todaySession[ex.id]?.[i]))
+    .filter(s => s?.kg || s?.reps).length;
+
+  // Day picker
+  const dayBtns = DAYS.map(d => {
+    const isActive = d.id === state.activeDayId;
+    const hasHist  = Object.keys(state.log).some(k => k.startsWith(`${d.id}_`) && state.log[k]?.finished);
+    const dot      = hasHist && !isActive ? `<div class="day-dot"></div>` : "";
+    return `<button class="day-btn${isActive?" active":""}"
+      style="${isActive?`background:${d.accent};border-color:${d.accent}`:""}"
+      onclick="setDay('${d.id}')">
+      <div class="day-emoji">${d.emoji}</div>
+      <div>${d.id}</div>
+      ${dot}
+    </button>`;
+  }).join("");
+
+  // Warmup
+  const warmupItems = activeDay.warmup.map(w =>
+    `<div class="warmup-item"><span class="warmup-arrow">→</span>${w}</div>`).join("");
+
+  // Exercises
+  const exCards = activeDay.exercises.map(ex =>
+    renderExerciseCard(ex, todaySession, prevSession)).join("");
+
+  // Bottom buttons
+  let bottomBtns = "";
+  if (!isFinished && totalSets > 0) {
+    bottomBtns += `<button class="btn-finish" onclick="openFinishModal()">🏁 Finish Workout — Save to History</button>`;
+  }
+  if (isFinished) {
+    bottomBtns += `<div class="btn-finished-state">✓ Session saved to history</div>`;
+  }
+  if (totalSets > 0) {
+    if (state.confirmClear) {
+      bottomBtns += `<div class="confirm-row">
+        <button class="btn-clear-confirm" onclick="clearToday()">Yes, clear it</button>
+        <button class="btn-cancel" onclick="setClearConfirm(false)">Cancel</button>
+      </div>`;
+    } else {
+      bottomBtns += `<button class="btn-clear" onclick="setClearConfirm(true)">Clear today's log</button>`;
+    }
+  }
+
+  const configWarning = state.configMissing ? `
+    <div class="config-warning">
+      <strong>⚠️ Firebase not connected</strong>
+      Open index.html and paste your Firebase config at the top of the script. Data is saving to this browser only until then.
+    </div>` : "";
+
+  return `
+    ${configWarning}
+    <div class="day-picker">${dayBtns}</div>
+    <div class="day-header">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px">
+        <div>
+          <div class="day-title" style="color:${activeDay.accent}">${activeDay.name}</div>
+          <div class="day-subtitle">${activeDay.subtitle}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:#9a9690">⏱ ${activeDay.totalTime}</div>
+          ${isFinished ? `<div class="finished-badge">✓ Session finished</div>` : ""}
+        </div>
+      </div>
+      ${prevKey ? `<div class="prev-badge">📋 Prev session: ${prevKey.split("_")[1]}</div>` : ""}
+    </div>
+    <div class="warmup-box">
+      <div class="warmup-title">General Warm-Up — 5–8 min</div>
+      ${warmupItems}
+    </div>
+    <div class="rpt-note">
+      <div class="rpt-note-title">RPT — Heaviest set first</div>
+      <div class="rpt-note-body">Hit top of rep range on ALL sets → add weight next session. Log KG + reps for every working set.</div>
+    </div>
+    <div style="padding:0 14px">${exCards}</div>
+    <div class="bottom-btns">${bottomBtns}</div>`;
+}
+
+function renderHistory() {
+  const entries = Object.entries(state.log)
+    .filter(([,d]) => d.finished)
+    .map(([key, dayData]) => {
+      const [dayId, date] = key.split("_");
+      const day = DAYS.find(d => d.id === dayId);
+      return day ? {key, dayId, date, day, dayData} : null;
+    })
+    .filter(Boolean)
+    .sort((a,b) => b.date.localeCompare(a.date));
+
+  if (!entries.length) return `<div class="history-empty">No finished sessions yet.<br/>Hit Finish Workout at the end of a session!</div>`;
+
+  const cards = entries.map(({key, day, date, dayData}) => {
+    const isOpen = state.openExercises[`hist_${key}`];
+    let body = "";
+    if (isOpen) {
+      const exRows = day.exercises.map(ex => {
+        const exData = dayData[ex.id];
+        if (!exData) return "";
+        const hasData = Object.values(exData).some(s => s && (s.kg || s.reps));
+        if (!hasData) return "";
+        const setRows = ex.workingSets.map((ws,i) => {
+          const s = exData[i];
+          if (!s || (!s.kg && !s.reps)) return "";
+          return `<div class="hist-set-row">
+            <span class="hist-set-lbl">${ws.label}</span>
+            ${s.kg   ? `<span class="hist-kg">${s.kg}kg</span>` : ""}
+            ${s.reps ? `<span class="hist-reps">${s.reps} reps</span>` : ""}
+          </div>`;
+        }).join("");
+        return `<div style="margin-bottom:12px"><div class="hist-ex-name">${ex.name}</div>${setRows}</div>`;
+      }).join("");
+
+      const deleteBtn = state.confirmDeleteKey === key
+        ? `<div class="confirm-row" style="margin-top:10px">
+            <button class="btn-delete-yes" onclick="deleteSession('${key}')">Yes, delete</button>
+            <button class="btn-delete-no" onclick="setDeleteConfirm(null)">Cancel</button>
+          </div>`
+        : `<button class="btn-delete" onclick="setDeleteConfirm('${key}')">Delete session</button>`;
+
+      body = `<div class="hist-body">${exRows}${deleteBtn}</div>`;
+    }
+
+    return `<div class="hist-card" style="border-left-color:${day.accent}">
+      <div class="hist-header" onclick="toggleEx('hist_${key}')">
+        <div>
+          <div class="hist-day-name">${day.emoji} Day ${day.id} — ${day.name}</div>
+          <div class="hist-date">${date}</div>
+        </div>
+        <div style="font-size:20px;color:#9a9690">${isOpen?"−":"+"}</div>
+      </div>
+      ${body}
+    </div>`;
+  }).join("");
+
+  return `<div class="history-wrap"><div class="history-title">Session History</div>${cards}</div>`;
+}
+
+function renderSchedule() {
+  const rows = SCHEDULE.map(s => {
+    const day = s.dayId ? DAYS.find(d => d.id === s.dayId) : null;
+    return `<div class="sched-row" style="border-left-color:${s.color}">
+      <div class="sched-day" style="color:${s.dayId?s.color:"#9a9690"}">${s.day}</div>
+      ${day
+        ? `<span class="sched-emoji">${day.emoji}</span><span class="sched-session">Day ${day.id} — ${day.name}</span>`
+        : `<span class="sched-rest">Rest / Walk</span>`}
+    </div>`;
+  }).join("");
+
+  return `<div class="schedule-wrap">
+    <div class="history-title">Weekly Structure</div>
+    ${rows}
+    <div class="info-box" style="border-left-color:#c8960a">
+      <div class="info-box-title" style="color:#a07020">Progression Rule</div>
+      <div class="info-box-body">Hit the top of your rep range on <strong>all sets</strong> → add weight to Set 1 next session. Everything else auto-adjusts at –10–15% per set.</div>
+    </div>
+    <div class="info-box" style="border-left-color:#9a60d0">
+      <div class="info-box-title" style="color:#6a30a8">Abs</div>
+      <div class="info-box-body">Day A: Hanging Knee Raises + Ab Wheel/Plank after triceps. Day C: Weighted Crunch + Bench Leg Raises after arms. Core twice a week.</div>
+    </div>
+  </div>`;
+}
+
+function renderModal() {
+  if (!state.showFinishModal) return "";
+  const today = todayKey();
+  const activeDay = DAYS.find(d => d.id === state.activeDayId);
+  const sessionKey = `${state.activeDayId}_${today}`;
+  const todaySession = state.log[sessionKey] || {};
+  const totalSets = activeDay.exercises
+    .flatMap(ex => ex.workingSets.map((_,i) => todaySession[ex.id]?.[i]))
+    .filter(s => s?.kg || s?.reps).length;
+  return `<div class="modal-overlay" onclick="closeFinishModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-icon">🏁</div>
+      <div class="modal-title">Finish Day ${state.activeDayId} — ${activeDay.name}?</div>
+      <div class="modal-body">${totalSets} set${totalSets!==1?"s":""} logged. This will save the session to your history.</div>
+      <button class="btn-modal-confirm" onclick="finishSession()">Save to History ✓</button>
+      <button class="btn-modal-cancel" onclick="closeFinishModal()">Keep logging</button>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// MAIN RENDER
+// ═══════════════════════════════════════════════════════
+
+function render() {
+  const activeDay = DAYS.find(d => d.id === state.activeDayId);
+  const accent = activeDay.accent;
+
+  let tabContent = "";
+  if      (state.tab === "workout")  tabContent = renderWorkout();
+  else if (state.tab === "history")  tabContent = renderHistory();
+  else if (state.tab === "schedule") tabContent = renderSchedule();
+
+  // Total sets today for header
+  const today = todayKey();
+  const sessionKey = `${state.activeDayId}_${today}`;
+  const todaySession = state.log[sessionKey] || {};
+  const totalSets = activeDay.exercises
+    .flatMap(ex => ex.workingSets.map((_,i) => todaySession[ex.id]?.[i]))
+    .filter(s => s?.kg || s?.reps).length;
+
+  const tabs = ["workout","history","schedule"].map(t => `
+    <button class="tab-btn${state.tab===t?" active":""}" style="--accent:${accent}" onclick="setTab('${t}')">
+      ${t.toUpperCase()}
+    </button>`).join("");
+
+  document.getElementById("app").innerHTML = `
+    <div class="header">
+      <div class="header-eyebrow">Home Training System</div>
+      <div class="header-top">
+        <div>
+          <div class="header-title" style="color:#1a1814">IRON HOME</div>
+          <div class="header-sub">Bowflex 1090s · Pull-Up Bar · Bench</div>
+        </div>
+        ${totalSets > 0 ? `<div class="header-sets">
+          <div class="header-sets-num" style="color:${accent}">${totalSets}</div>
+          <div class="header-sets-label">sets today</div>
+        </div>` : ""}
+      </div>
+    </div>
+    <div class="tabs">${tabs}</div>
+    ${tabContent}
+    ${renderModal()}
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+// ACTIONS (global so onclick can reach them)
+// ═══════════════════════════════════════════════════════
+
+window.setTab     = t => { state.tab = t; render(); };
+window.setDay     = id => { state.activeDayId = id; state.confirmClear = false; render(); };
+window.toggleEx   = id => { state.openExercises[id] = !state.openExercises[id]; render(); };
+window.setClearConfirm  = v => { state.confirmClear = v; render(); };
+window.setDeleteConfirm = k => { state.confirmDeleteKey = k; render(); };
+window.openFinishModal  = () => { state.showFinishModal = true; render(); };
+window.closeFinishModal = () => { state.showFinishModal = false; render(); };
+
+window.updateSet = async (exId, setIndex, field, value) => {
+  const today = todayKey();
+  const sessionKey = `${state.activeDayId}_${today}`;
+  if (!state.log[sessionKey]) state.log[sessionKey] = {};
+  if (!state.log[sessionKey][exId]) state.log[sessionKey][exId] = {};
+  if (!state.log[sessionKey][exId][setIndex]) state.log[sessionKey][exId][setIndex] = {};
+  state.log[sessionKey][exId][setIndex][field] = value;
+  // Don't re-render (would lose input focus) — just save
+  await fbSaveSession(sessionKey, state.log[sessionKey]);
+};
+
+window.finishSession = async () => {
+  const today = todayKey();
+  const sessionKey = `${state.activeDayId}_${today}`;
+  if (!state.log[sessionKey]) state.log[sessionKey] = {};
+  state.log[sessionKey].finished = true;
+  state.log[sessionKey].finishedAt = new Date().toISOString();
+  state.showFinishModal = false;
+  await fbSaveSession(sessionKey, state.log[sessionKey]);
+  showToast("✓ Session saved!");
+  render();
+};
+
+window.clearToday = async () => {
+  const today = todayKey();
+  const sessionKey = `${state.activeDayId}_${today}`;
+  await fbDeleteSession(sessionKey);
+  delete state.log[sessionKey];
+  state.confirmClear = false;
+  showToast("Log cleared");
+  render();
+};
+
+window.deleteSession = async (key) => {
+  await fbDeleteSession(key);
+  delete state.log[key];
+  state.confirmDeleteKey = null;
+  state.openExercises[`hist_${key}`] = false;
+  showToast("Session deleted");
+  render();
+};
+
+// ═══════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════
+
+window.addEventListener("firebase-ready", async () => {
+  // Check if config is still placeholder
+  if (window._db._databaseId?.projectId === "YOUR_PROJECT_ID" || !window._db) {
+    state.configMissing = true;
+  }
+
+  state.log = await fbLoadAllSessions();
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("app").style.display     = "block";
+  render();
+});
+
+// Fallback if Firebase module fails to load
+setTimeout(() => {
+  if (document.getElementById("loading").style.display !== "none") {
+    state.configMissing = true;
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("app").style.display     = "block";
+    render();
+  }
+}, 4000);
+</script>
+</body>
+</html>
