@@ -592,7 +592,7 @@ window.showToast=showToast;
 
 /* ═══ RENDER HELPERS ═══ */
 function tagEl(type){const s=TS[type]||TS.Straight;return`<span class="tag" style="background:${s.bg};border-color:${s.border};color:${s.text}">${type}</span>`;}
-function prevBadge(kg,reps){if(!kg&&!reps)return"";const p=[];if(kg)p.push(kg+"kg");if(reps)p.push(reps+" reps");return`<span class="prev-tag">${p.join(" &middot; ")} &uarr;prev</span>`;}
+function prevBadge(kgRaw,reps){if(!kgRaw&&!reps)return"";const p=[];if(kgRaw)p.push(kgRaw+"kg");if(reps)p.push(reps+" reps");return`<span class="prev-tag">${p.join(" &middot; ")} &uarr;prev</span>`;}
 function wuTbl(sets){if(!sets.length)return"";return`<div class="wu-table"><div class="wu-table-title">Warm-Up Sets &mdash; not logged</div>${sets.map(s=>`<div class="wu-row"><span class="wu-label">${s.label}</span><span class="wu-pct">${s.pct}</span><span class="wu-reps">${s.reps} reps</span><span class="wu-rest">${s.rest}</span></div>`).join("")}</div>`;}
 
 function sRow(ws,i,ex,pd,td){
@@ -609,7 +609,7 @@ function sRow(ws,i,ex,pd,td){
       <span class="set-rest-lbl">rest: ${ws.rest}</span>
     </div>
     <div class="set-inputs">
-      <input class="set-input${ck?" filled":""}" type="number" inputmode="decimal" placeholder="${wLbl()}" value="${ck}" oninput="updSet('${ex.id}',${i},'kg',this.value)"/>
+      <input class="set-input${ck?" filled":""}" type="number" inputmode="decimal" placeholder="kg" value="${ck}" oninput="updSet('${ex.id}',${i},'kg',this.value)"/>
       <input class="set-input${cr?" filled":""}" type="number" inputmode="numeric" placeholder="reps" value="${cr}" oninput="updSet('${ex.id}',${i},'reps',this.value)"/>
       ${prevBadge(pd?.[i]?.kg,pd?.[i]?.reps)}
       <button id="rtbtn_${ex.id}_${i}" class="${btnCls}" onclick="startRest('${ex.id}',${i},${tSecs})">${btnTxt}</button>
@@ -624,7 +624,7 @@ function exCard(ex,ts,ps){
   const stat=allD?`<span class="ex-status-done">&#x2713; done</span>`:logged>0?`<span class="ex-status-prog">${logged}/${ex.workingSets.length} sets</span>`:"";
   let body="";
   if(isO){
-    const ch=`<div class="ws-col-headers"><div class="ws-col-h"></div><div class="ws-col-h">Target</div><div class="ws-col-h">${wLbl()}</div><div class="ws-col-h">Reps</div><div class="ws-col-h">Rest</div></div>`;
+    const ch=`<div class="ws-col-headers"><div class="ws-col-h"></div><div class="ws-col-h">Target</div><div class="ws-col-h">KG</div><div class="ws-col-h">Reps</div><div class="ws-col-h">Rest</div></div>`;
     body=`<div class="ex-body">${wuTbl(ex.warmupSets)}${ch}${ex.workingSets.map((ws,i)=>sRow(ws,i,ex,pd,td)).join("")}${ex.dropSet?`<div class="drop-set">DROP SET: ${ex.dropSet}</div>`:""}<div class="cue" style="border-color:${t.border}">${ex.cue}</div></div>`;
   }
   return`<div class="ex-card${isO?" open":""}" style="border-left-color:${isO?t.border:"#ddd9d0"}"><div class="ex-header" onclick="togEx('${ex.id}')"><div style="flex:1;padding-right:10px"><div class="ex-name">${ex.name}${stat}</div>${tagEl(ex.type)}</div><div class="ex-toggle">${isO?"&minus;":"+"}</div></div>${body}</div>`;
@@ -675,7 +675,7 @@ function rWorkout(){
   </div>`;
 
   const warmup=`<div class="warmup-box"><div class="warmup-title">General Warm-Up &mdash; 5&ndash;8 min</div>${wk.warmup.map(w=>`<div class="warmup-item"><span class="warmup-arrow">&rarr;</span>${w}</div>`).join("")}</div>`;
-  const rptNote=`<div class="rpt-note"><div class="rpt-note-title">RPT &mdash; Heaviest set first</div><div class="rpt-note-body">Hit top of rep range on ALL sets &rarr; add weight next session. Log weight in ${wLbl()}.</div></div>`;
+  const rptNote=`<div class="rpt-note"><div class="rpt-note-title">RPT &mdash; Heaviest set first</div><div class="rpt-note-body">Hit top of rep range on ALL sets &rarr; add weight next session. Always log in <strong>kg</strong>.</div></div>`;
   const cards=`<div class="ex-list">${wk.exercises.map(ex=>exCard(ex,ts,ps)).join("")}</div>`;
 
   let bb="";
@@ -698,7 +698,7 @@ function rHistory(){
     const vol=calcVolume(dd,wk.exercises);
     let body="";
     if(isO){
-      const rows=wk.exercises.map(ex=>{const ed=dd[ex.id];if(!ed)return"";const hd=Object.values(ed).some(s=>s&&(s.kg||s.reps));if(!hd)return"";return`<div class="hist-ex-name">${ex.name}</div>`+ex.workingSets.map((ws,i)=>{const s=ed[i];if(!s||(!s.kg&&!s.reps))return"";return`<div class="hist-set-row"><span class="hist-set-lbl">${ws.label}</span>${s.kg?`<span class="hist-kg">${s.kg}${wLbl()}</span>`:""}${s.reps?`<span class="hist-reps">${s.reps} reps</span>`:""}</div>`;}).join("");}).join("");
+      const rows=wk.exercises.map(ex=>{const ed=dd[ex.id];if(!ed)return"";const hd=Object.values(ed).some(s=>s&&(s.kg||s.reps));if(!hd)return"";return`<div class="hist-ex-name">${ex.name}</div>`+ex.workingSets.map((ws,i)=>{const s=ed[i];if(!s||(!s.kg&&!s.reps))return"";return`<div class="hist-set-row"><span class="hist-set-lbl">${ws.label}</span>${s.kg?`<span class="hist-kg">${s.kg}kg</span>`:""}${s.reps?`<span class="hist-reps">${s.reps} reps</span>`:""}</div>`;}).join("");}).join("");
       const del=S.confirmDeleteKey===key?`<div class="confirm-row" style="margin-top:12px"><button class="btn-delete-yes" onclick="delSess('${key}')">Yes, delete</button><button class="btn-delete-no" onclick="setDC(null)">Cancel</button></div>`:`<button class="btn-delete" onclick="setDC('${key}')">Delete session</button>`;
       body=`<div class="hist-body">${rows}<div class="hist-vol">Total volume: ${vol}kg</div>${del}</div>`;
     }
@@ -733,14 +733,23 @@ function rStats(){
   const hCm=p.heightCm||null,nCm=p.neckCm||null;
 
   /* UNIT TOGGLES */
-  const unitRow=`<div class="unit-row">
-    <div class="unit-group">
-      ${["lbs","kg"].map(u=>`<button class="unit-btn${S.units.weight===u?" active":""}" onclick="setUnit('weight','${u}')">${u}</button>`).join("")}
+  const unitRow=`<div style="margin-bottom:18px">
+    <div style="font-size:10px;letter-spacing:2px;color:#9a9690;text-transform:uppercase;font-weight:600;margin-bottom:8px">Body Stats Display Units</div>
+    <div class="unit-row" style="margin-bottom:0">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div style="font-size:10px;color:#9a9690;letter-spacing:1px;text-transform:uppercase">Body Weight</div>
+        <div class="unit-group">
+          ${["lbs","kg"].map(u=>`<button class="unit-btn${S.units.weight===u?" active":""}" onclick="setUnit('weight','${u}')">${u}</button>`).join("")}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div style="font-size:10px;color:#9a9690;letter-spacing:1px;text-transform:uppercase">Measurements</div>
+        <div class="unit-group">
+          ${["cm","in"].map(u=>`<button class="unit-btn${S.units.measure===u?" active":""}" onclick="setUnit('measure','${u}')">${u}</button>`).join("")}
+        </div>
+      </div>
     </div>
-    <span class="unit-sep">&amp;</span>
-    <div class="unit-group">
-      ${["cm","in"].map(u=>`<button class="unit-btn${S.units.measure===u?" active":""}" onclick="setUnit('measure','${u}')">${u}</button>`).join("")}
-    </div>
+    <div style="font-size:11px;color:#9a9690;margin-top:8px;font-style:italic">&#x2139;&#xFE0F; Workout weights are always logged in <strong>kg</strong></div>
   </div>`;
 
   /* PROFILE CARD */
