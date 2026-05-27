@@ -846,67 +846,93 @@ function rStats(){
     })()}
   </div>`;
 
-  /* CHARTS */
+  /* CHARTS — independent of body stats */
   let chartsHtml="";
+  const W=320,H=110,px=10,py=8;
+  function svgLine(vals,mn,mx,color,dash){
+    if(!vals||!vals.some(v=>v!==null&&v!==undefined))return"";
+    const pts2=vals.map((v,i)=>{if(v===null||v===undefined)return null;const x=px+i/(vals.length-1||1)*(W-px*2);const y=H-py-((v-mn)/(mx-mn||1))*(H-py*2);return`${x.toFixed(1)},${y.toFixed(1)}`;}).filter(Boolean).join(" ");
+    if(!pts2)return"";
+    return`<polyline points="${pts2}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"${dash?` stroke-dasharray="${dash}"`:""}/>`+vals.map((v,i)=>{if(v===null||v===undefined)return"";const x=px+i/(vals.length-1||1)*(W-px*2);const y=H-py-((v-mn)/(mx-mn||1))*(H-py*2);return`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}"/>`;}).join("");
+  }
+
+  // Graph 1: Recomp — only if body stats logged with profile
   if(stats.length>1&&hCm&&nCm){
     const pts=stats.slice(-12);
-    const W=320,H=110,px=10,py=8;
-    function svgLine(vals,mn,mx,color,dash){
-      if(!vals.some(v=>v!==null))return"";
-      const pts2=vals.map((v,i)=>{if(v===null)return null;const x=px+i/(vals.length-1||1)*(W-px*2);const y=H-py-((v-mn)/(mx-mn||1))*(H-py*2);return`${x.toFixed(1)},${y.toFixed(1)}`;}).filter(Boolean).join(" ");
-      return`<polyline points="${pts2}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"${dash?` stroke-dasharray="${dash}"`:""}/>`+vals.map((v,i)=>{if(v===null)return"";const x=px+i/(vals.length-1||1)*(W-px*2);const y=H-py-((v-mn)/(mx-mn||1))*(H-py*2);return`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}"/>`;}).join("");
-    }
-
-    // Graph 1: Recomp - lean mass vs fat mass vs waist
     const leans=pts.map(s=>{const bf=navyBF(s.waistCm,nCm,hCm);return bf?parseFloat((s.weightKg*(1-bf/100)).toFixed(1)):null;});
     const fats=pts.map(s=>{const bf=navyBF(s.waistCm,nCm,hCm);return bf?parseFloat((s.weightKg*bf/100).toFixed(1)):null;});
-    const waists=pts.map(s=>parseFloat(cmToM(s.waistCm)));
     const allR=[...leans,...fats].filter(Boolean);
     if(allR.length>0){
       const mn=Math.min(...allR)-2,mx=Math.max(...allR)+2;
       chartsHtml+=`<div class="stats-card"><div class="stats-card-title">&#x1F4C8; Recomposition Trend</div><div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="100%">${svgLine(leans,mn,mx,"#2a7a3a","")}${svgLine(fats,mn,mx,"#c03030","4,3")}</svg></div><div class="chart-legend"><div class="legend-item"><div class="legend-dot" style="background:#2a7a3a"></div>Lean Mass (${wLbl()})</div><div class="legend-item"><div class="legend-dot" style="background:#c03030"></div>Fat Mass (${wLbl()})</div></div></div>`;
     }
+  }
 
-    // Graph 2: Strength vs Bodyweight
-    // Gather anchor lift top set from log
-    const anchorEx=S.strengthAnchor; // "A1" or "B1"
+  // Graph 2: Strength — works as soon as 2+ finished sessions exist, no body stats needed
+  {
+    const anchorEx=S.strengthAnchor;
     const wkId=anchorEx[0];
     const anchorWk=WORKOUTS.find(w=>w.id===wkId);
     const anchorExObj=anchorWk?.exercises.find(e=>e.id===anchorEx);
-    const strengthPts=[];
-    const bodyweightPts=[];
-    Object.entries(S.log).filter(([k,d])=>d.finished&&k.startsWith(wkId+"_")).sort((a,b)=>a[0].localeCompare(b[0])).slice(-12).forEach(([key,d])=>{
+    const finishedSessions=Object.entries(S.log)
+      .filter(([k,d])=>d.finished&&k.startsWith(wkId+"_"))
+      .sort((a,b)=>a[0].localeCompare(b[0]))
+      .slice(-12);
+    const strengthPts=finishedSessions.map(([key,d])=>{
       const ed=d[anchorEx];
-      if(ed&&ed[0]){
+      if(ed&&(ed[0]?.kg||ed[0]?.reps)){
         const w=ed[0].kg?parseFloat(ed[0].kg):null;
         const r=ed[0].reps?parseFloat(ed[0].reps):null;
-        // Estimate 1RM: w*reps*0.0333+w
-        const e1rm=w&&r?parseFloat((w+w*r*0.0333).toFixed(1)):r; // reps only for BW moves
-        strengthPts.push(e1rm||null);
-      }else{strengthPts.push(null);}
+        if(w&&r)return parseFloat((w+w*r*0.0333).toFixed(1)); // Epley 1RM estimate
+        if(r)return r; // BW move — plot raw reps
+      }
+      return null;
     });
-    // Match bodyweight pts to same dates
-    const liftDates=Object.keys(S.log).filter(k=>S.log[k].finished&&k.startsWith(wkId+"_")).sort().slice(-12).map(k=>k.split("_")[1]);
-    liftDates.forEach(d=>{
-      const sv=stats.find(s=>s.date===d);
-      bodyweightPts.push(sv?parseFloat(kgToW(sv.weightKg)):null);
+    // Bodyweight overlay — null if no body stats for that date
+    const bodyweightPts=finishedSessions.map(([key])=>{
+      const date=key.split("_")[1];
+      const sv=stats.find(s=>s.date===date);
+      return sv?parseFloat(kgToW(sv.weightKg)):null;
     });
-    if(strengthPts.filter(Boolean).length>0){
+    if(strengthPts.filter(Boolean).length>=2){
+      const sessionLabels=finishedSessions.map(([k])=>k.split("_")[1]);
       const allS=[...strengthPts,...bodyweightPts].filter(Boolean);
       const mn2=Math.min(...allS)-2,mx2=Math.max(...allS)+2;
-      const anchorName=anchorExObj?anchorExObj.name:"Anchor Lift";
-      chartsHtml+=`<div class="stats-card"><div class="stats-card-title">&#x1F4AA; Strength vs Bodyweight</div>
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          ${["A1","B1"].map(id=>{const w=WORKOUTS.find(w=>w.id===id[0]);const e=w?.exercises.find(ex=>ex.id===id);return e?`<button style="padding:5px 10px;font-size:10px;font-weight:700;border:1.5px solid ${S.strengthAnchor===id?"#c8960a":"#ddd9d0"};border-radius:6px;background:${S.strengthAnchor===id?"#fef9e8":"#f5f4f0"};color:${S.strengthAnchor===id?"#8a6a00":"#5a5650"}" onclick="setAnchor('${id}')">${e.name.slice(0,18)}&hellip;</button>`:"";}).join("")}
+      chartsHtml+=`<div class="stats-card">
+        <div class="stats-card-title">&#x1F4AA; Strength Progress (Est. 1RM)</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          ${["A1","B1"].map(id=>{
+            const wk2=WORKOUTS.find(w=>w.id===id[0]);
+            const ex2=wk2?.exercises.find(ex=>ex.id===id);
+            if(!ex2)return"";
+            const active=S.strengthAnchor===id;
+            return`<button style="padding:6px 12px;font-size:11px;font-weight:700;border:1.5px solid ${active?"#c8960a":"#ddd9d0"};border-radius:7px;background:${active?"#fef9e8":"#f5f4f0"};color:${active?"#8a6a00":"#5a5650"};cursor:pointer" onclick="setAnchor('${id}')">${ex2.name}</button>`;
+          }).join("")}
         </div>
-        <div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="100%">${svgLine(strengthPts,mn2,mx2,"#c8960a","")}${svgLine(bodyweightPts,mn2,mx2,"#9a9690","4,3")}</svg></div>
-        <div class="chart-legend"><div class="legend-item"><div class="legend-dot" style="background:#c8960a"></div>Est. 1RM / Reps (${wLbl()})</div><div class="legend-item"><div class="legend-dot" style="background:#9a9690"></div>Bodyweight (${wLbl()})</div></div>
+        <div class="chart-wrap">
+          <svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="100%">
+            ${svgLine(strengthPts,mn2,mx2,"#c8960a","")}
+            ${bodyweightPts.some(Boolean)?svgLine(bodyweightPts,mn2,mx2,"#9a9690","4,3"):""}
+          </svg>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;flex-wrap:wrap;gap:4px">
+          <div style="font-size:11px;color:#9a9690">${sessionLabels[0]||""}</div>
+          <div style="font-size:11px;color:#9a9690">${sessionLabels[sessionLabels.length-1]||""}</div>
+        </div>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#c8960a"></div>Est. 1RM (kg)</div>
+          ${bodyweightPts.some(Boolean)?`<div class="legend-item"><div class="legend-dot" style="background:#9a9690"></div>Bodyweight (${wLbl()})</div>`:""}
+        </div>
+        ${strengthPts.filter(Boolean).length<3?`<div style="font-size:11px;color:#9a9690;margin-top:8px;font-style:italic">Keep logging &mdash; trend line builds after 3+ sessions.</div>`:""}
       </div>`;
+    } else if(strengthPts.filter(Boolean).length===1){
+      chartsHtml+=`<div class="stats-card"><div class="stats-card-title">&#x1F4AA; Strength Progress</div><div style="font-size:13px;color:#9a9690;padding:8px 0;line-height:1.7">1 session logged for ${anchorExObj?.name||"anchor lift"}. Complete one more ${wkId==="A"?"Workout A":"Workout B"} to see your strength trend.</div></div>`;
     }
+  }
 
-    // Graph 3: Session Tonnage per workout
+  // Graph 3: Session Tonnage — works as soon as any sessions exist
+  {
     const tonnageByWk={A:[],B:[],C:[]};
-    const tonnageDates=[];
     WORKOUTS.forEach(wk=>{
       Object.entries(S.log).filter(([k,d])=>d.finished&&k.startsWith(wk.id+"_")).sort((a,b)=>a[0].localeCompare(b[0])).slice(-8).forEach(([key,d])=>{
         tonnageByWk[wk.id].push(calcVolume(d,wk.exercises));
