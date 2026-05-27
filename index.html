@@ -268,6 +268,8 @@ button{cursor:pointer;font-family:inherit}
 /* TOAST */
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#1a1814;color:#fff;padding:12px 24px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;transition:transform .3s;pointer-events:none;white-space:nowrap}
 #toast.show{transform:translateX(-50%) translateY(0)}
+.btn-report{width:100%;padding:14px;background:#1a1814;border:none;border-radius:12px;color:#c8960a;font-size:14px;font-weight:700;letter-spacing:1px;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-report:hover{background:#2a2820}
 /* USER MENU */
 .user-menu{position:fixed;top:56px;right:12px;background:#fff;border:1.5px solid #ddd9d0;border-radius:12px;padding:8px;box-shadow:0 4px 20px rgba(0,0,0,.12);z-index:200;min-width:200px;display:none}
 .user-menu.open{display:block}
@@ -1082,7 +1084,8 @@ function rStats(){
     logHtml=`<div class="stats-card"><div class="stats-card-title">&#x1F4C5; Check-In Log</div>${rows}</div>`;
   }
 
-  return`<div class="stats-wrap">${unitRow}${profileCard}${logCard}${resultsHtml}${phaseHtml}${chartsHtml}${logHtml}</div>`;
+  const reportBtn=`<button class="btn-report" onclick="generateWeeklyReport()">&#x1F4CA; Generate Weekly Report</button>`;
+  return`<div class="stats-wrap">${reportBtn}${unitRow}${profileCard}${logCard}${resultsHtml}${phaseHtml}${chartsHtml}${logHtml}</div>`;
 }
 
 /* ═══ MODAL ═══ */
@@ -1332,6 +1335,273 @@ window.showTonnageTip=(date,vol)=>{
 window.delStat=async idx=>{
   S.profile.stats.splice(idx,1);
   await fbSaveProfile(S.profile);showToast("Entry deleted");render();
+};
+
+window.generateWeeklyReport=()=>{
+  const stats=S.profile.stats||[];
+  const hCm=S.profile.heightCm,nCm=S.profile.neckCm;
+  const phase=S.profile.phase||"recomp";
+
+  // Get last 2 entries for comparison
+  const latest=stats.length?stats[stats.length-1]:null;
+  const prev=stats.length>1?stats[stats.length-2]:null;
+
+  // Week number since first check-in
+  const weekNum=stats.length;
+
+  // BF calcs
+  const latestBF=latest&&hCm&&nCm?navyBF(latest.waistCm,latest.neckCm||nCm,latest.heightCm||hCm):null;
+  const prevBF=prev&&hCm&&nCm?navyBF(prev.waistCm,prev.neckCm||nCm,prev.heightCm||hCm):null;
+  const latestFatKg=latestBF?parseFloat((latest.weightKg*latestBF/100).toFixed(1)):null;
+  const latestLeanKg=latestFatKg?parseFloat((latest.weightKg-latestFatKg).toFixed(1)):null;
+  const prevFatKg=prevBF?parseFloat((prev.weightKg*prevBF/100).toFixed(1)):null;
+  const prevLeanKg=prevFatKg?parseFloat((prev.weightKg-prevFatKg).toFixed(1)):null;
+  const macros=latestBF?calcMacros(latest.weightKg,latestBF,phase):null;
+  const kino=latest&&hCm?{ideal:kinoIdeal(hCm),ratio:(latest.waistCm/hCm*100).toFixed(1),excessIn:Math.max(0,(latest.waistCm-kinoIdeal(hCm))/2.54).toFixed(1)}:null;
+
+  // Workout sessions this week (last 7 days)
+  const todayD=new Date();
+  const weekAgo=new Date(todayD-7*24*60*60*1000).toISOString().slice(0,10);
+  const sessionsThisWeek=Object.entries(S.log).filter(([k,d])=>d.finished&&k.split("_")[1]>=weekAgo);
+  const wkHit={A:0,B:0,C:0};
+  sessionsThisWeek.forEach(([k])=>{const id=k[0];if(wkHit[id]!==undefined)wkHit[id]++;});
+
+  // Anchor lift top sets (last session for A and B)
+  function getLastTopSet(wkId,exId){
+    const sessions=Object.entries(S.log).filter(([k,d])=>d.finished&&k.startsWith(wkId+"_")).sort((a,b)=>b[0].localeCompare(a[0]));
+    if(!sessions.length)return null;
+    const [,d]=sessions[0];
+    const ed=d[exId];
+    if(!ed||!ed[0])return null;
+    return{kg:ed[0].kg||"BW",reps:ed[0].reps||"",date:sessions[0][0].split("_")[1]};
+  }
+  const benchTop=getLastTopSet("A","A1");
+  const pullupTop=getLastTopSet("B","B1");
+
+  // Weekly tonnage
+  function getLastTonnage(wkId){
+    const wk=WORKOUTS.find(w=>w.id===wkId);
+    const sessions=Object.entries(S.log).filter(([k,d])=>d.finished&&k.startsWith(wkId+"_")).sort((a,b)=>b[0].localeCompare(a[0]));
+    if(!sessions.length)return null;
+    return{vol:calcVolume(sessions[0][1],wk.exercises),date:sessions[0][0].split("_")[1]};
+  }
+  const tonA=getLastTonnage("A"),tonB=getLastTonnage("B"),tonC=getLastTonnage("C");
+
+  // Delta helpers
+  const delta=(a,b,decimals=1)=>{if(a==null||b==null)return"";const d=(a-b);return(d>0?"+":"")+d.toFixed(decimals);};
+  const arrow=(a,b,goodDir="down")=>{if(a==null||b==null)return"";const d=a-b;if(Math.abs(d)<0.05)return"→";if(goodDir==="down")return d<0?"↓ Good":"↑ Watch";return d>0?"↑ Good":"↓ Watch";};
+  const phaseLabel={cut:"Cut — 15% deficit",recomp:"Recomp — maintenance",bulk:"Bulk — +300kcal surplus"};
+
+  // Build the report HTML
+  const reportHtml=`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>Iron Home — Weekly Report ${latest?latest.date:""}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Courier New",Courier,monospace;background:#f5f4f0;color:#1a1814;padding:32px;max-width:760px;margin:0 auto}
+  .header{border-bottom:3px solid #c8960a;padding-bottom:16px;margin-bottom:24px}
+  .title{font-size:32px;font-weight:700;font-family:Georgia,serif;font-style:italic;color:#1a1814}
+  .subtitle{font-size:13px;color:#9a9690;margin-top:4px}
+  .week-badge{display:inline-block;background:#c8960a;color:#fff;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;letter-spacing:2px;text-transform:uppercase;margin-top:8px}
+  .section{margin-bottom:24px}
+  .section-title{font-size:10px;letter-spacing:3px;color:#9a9690;text-transform:uppercase;font-weight:700;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #e8e4dc}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+  .grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px}
+  .tile{background:#fff;border:1.5px solid #ddd9d0;border-radius:10px;padding:12px 14px}
+  .tile.gold{border-color:#e8c870;background:#fef9e8}
+  .tile.green{border-color:#a0d0a8;background:#edf7ef}
+  .tile.red{border-color:#f0b0b0;background:#fff0f0}
+  .tile.blue{border-color:#b0d4f0;background:#eaf2fb}
+  .tile-lbl{font-size:9px;letter-spacing:2px;color:#9a9690;text-transform:uppercase;font-weight:600;margin-bottom:4px}
+  .tile-val{font-size:22px;font-weight:700;font-family:Georgia,serif;color:#1a1814}
+  .tile-sub{font-size:11px;color:#9a9690;margin-top:2px}
+  .tile-delta{font-size:12px;font-weight:700;margin-top:4px}
+  .delta-good{color:#2a7a3a}
+  .delta-warn{color:#c8960a}
+  .delta-bad{color:#c03030}
+  .workout-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#fff;border:1.5px solid #ddd9d0;border-radius:8px;margin-bottom:8px}
+  .workout-label{font-size:13px;font-weight:700}
+  .workout-meta{font-size:12px;color:#9a9690}
+  .workout-vol{font-size:13px;font-weight:700;color:#c8960a}
+  .hit{color:#2a7a3a;font-weight:700}
+  .miss{color:#9a9690}
+  .lift-row{display:flex;justify-content:space-between;padding:10px 14px;background:#fff;border:1.5px solid #ddd9d0;border-radius:8px;margin-bottom:8px}
+  .macro-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px}
+  .macro-tile{background:#fff;border:1.5px solid #ddd9d0;border-radius:8px;padding:10px 12px;text-align:center}
+  .macro-val{font-size:18px;font-weight:700;color:#1a1814;font-family:Georgia,serif}
+  .macro-lbl{font-size:9px;letter-spacing:1.5px;color:#9a9690;text-transform:uppercase;margin-top:2px}
+  .notes-box{background:#fff;border:1.5px solid #ddd9d0;border-radius:10px;padding:16px;min-height:80px}
+  .notes-prompt{font-size:12px;color:#9a9690;font-style:italic;line-height:1.8}
+  .footer{margin-top:32px;padding-top:16px;border-top:2px solid #e8e4dc;font-size:11px;color:#9a9690;display:flex;justify-content:space-between}
+  .phase-badge{display:inline-block;padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;margin-bottom:12px}
+  .phase-cut{background:#eaf2fb;color:#1a5fa8}
+  .phase-recomp{background:#fef9e8;color:#8a6a00}
+  .phase-bulk{background:#edf7ef;color:#1a5a28}
+  @media print{body{padding:16px}button{display:none}}
+  .print-btn{position:fixed;top:20px;right:20px;padding:10px 20px;background:#c8960a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+  .upload-note{background:#1a1814;color:#c8960a;border-radius:10px;padding:14px 16px;margin-bottom:24px;font-size:12px;line-height:1.8}
+</style>
+</head>
+<body>
+<button class="print-btn" onclick="window.print()">&#x1F5A8; Print / Save PDF</button>
+
+<div class="header">
+  <div class="title">IRON HOME</div>
+  <div class="subtitle">Weekly Progress Report &bull; Generated ${new Date().toLocaleDateString("en-GB",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div>
+  <div class="week-badge">Week ${weekNum} &bull; ${phaseLabel[phase]||phase}</div>
+</div>
+
+<div class="upload-note">
+  &#x1F916; Upload this report to Claude for coaching review after 4&ndash;8 weeks of consistent data.<br/>
+  The more entries logged, the more accurate and useful the analysis.
+</div>
+
+<!-- BODY COMPOSITION -->
+<div class="section">
+  <div class="section-title">&#x1F3AF; Body Composition</div>
+  <div class="grid4">
+    <div class="tile gold">
+      <div class="tile-lbl">Body Weight</div>
+      <div class="tile-val">${latest?kgToW(latest.weightKg):"—"}</div>
+      <div class="tile-sub">${wLbl()}</div>
+      ${prev?`<div class="tile-delta ${parseFloat(delta(latest.weightKg,prev.weightKg))<=0?"delta-good":"delta-warn"}">${delta(latest.weightKg,prev.weightKg)} ${wLbl()} vs last week</div>`:""}
+    </div>
+    <div class="tile ${latestBF>25?"red":latestBF>20?"":"green"}">
+      <div class="tile-lbl">Body Fat %</div>
+      <div class="tile-val">${latestBF?latestBF+"%":"—"}</div>
+      <div class="tile-sub">US Navy</div>
+      ${prevBF?`<div class="tile-delta ${parseFloat(delta(latestBF,prevBF))<=0?"delta-good":"delta-bad"}">${delta(latestBF,prevBF)}% ${arrow(latestBF,prevBF,"down")}</div>`:""}
+    </div>
+    <div class="tile red">
+      <div class="tile-lbl">Fat Mass</div>
+      <div class="tile-val">${latestFatKg?kgToW(latestFatKg):"—"}</div>
+      <div class="tile-sub">${wLbl()}</div>
+      ${prevFatKg?`<div class="tile-delta ${parseFloat(delta(latestFatKg,prevFatKg))<=0?"delta-good":"delta-bad"}">${delta(latestFatKg,prevFatKg)} ${wLbl()} ${arrow(latestFatKg,prevFatKg,"down")}</div>`:""}
+    </div>
+    <div class="tile green">
+      <div class="tile-lbl">Lean Mass</div>
+      <div class="tile-val">${latestLeanKg?kgToW(latestLeanKg):"—"}</div>
+      <div class="tile-sub">${wLbl()}</div>
+      ${prevLeanKg?`<div class="tile-delta ${parseFloat(delta(latestLeanKg,prevLeanKg))>=0?"delta-good":"delta-bad"}">${delta(latestLeanKg,prevLeanKg)} ${wLbl()} ${arrow(latestLeanKg,prevLeanKg,"up")}</div>`:""}
+    </div>
+  </div>
+  ${latest?`<div class="tile" style="margin-bottom:0">
+    <div class="tile-lbl">Kinobody Waist Ratio</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:18px;font-weight:700;font-family:Georgia,serif">${kino?kino.ratio:"-"}% <span style="font-size:13px;color:#9a9690">of height (ideal: 44.7%)</span></div>
+        <div style="font-size:12px;color:#9a9690;margin-top:2px">Waist: ${cmToM(latest.waistCm)}${mLbl()} &bull; Ideal: ${hCm?cmToM(kinoIdeal(hCm)).toString().slice(0,4):"—"}${mLbl()}</div>
+      </div>
+      ${kino?`<div style="font-size:13px;font-weight:700;color:${parseFloat(kino.excessIn)<=0?"#2a7a3a":parseFloat(kino.excessIn)<2?"#c8960a":"#c03030"}">${parseFloat(kino.excessIn)<=0?"✅ At ideal":"🔥 "+kino.excessIn+'" above ideal"}</div>`:""}
+    </div>
+  </div>`:""}
+</div>
+
+<!-- WEEKLY TRAINING -->
+<div class="section">
+  <div class="section-title">&#x1F4AA; Weekly Training</div>
+  ${["A","B","C"].map(id=>{
+    const wk=WORKOUTS.find(w=>w.id===id);
+    const hit=wkHit[id]>0;
+    const ton=id==="A"?tonA:id==="B"?tonB:tonC;
+    return`<div class="workout-row">
+      <div>
+        <div class="workout-label">${wk.emoji} ${wk.name} &mdash; ${wk.label}</div>
+        <div class="workout-meta">${ton?"Last: "+ton.date:"No sessions yet"}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="${hit?"hit":"miss"}">${hit?"✓ Done":"✗ Missed"}</div>
+        ${ton?`<div class="workout-vol">${ton.vol}kg</div>`:""}
+      </div>
+    </div>`;
+  }).join("")}
+</div>
+
+<!-- STRENGTH ANCHORS -->
+<div class="section">
+  <div class="section-title">&#x1F3CB; Strength Anchors (Last Session Top Set)</div>
+  ${benchTop?`<div class="lift-row">
+    <div><div style="font-size:13px;font-weight:700">DB Bench Press &mdash; Set 1</div><div style="font-size:11px;color:#9a9690">${benchTop.date}</div></div>
+    <div style="text-align:right"><div style="font-size:16px;font-weight:700;color:#c8960a">${benchTop.kg}kg &times; ${benchTop.reps} reps</div><div style="font-size:11px;color:#9a9690">Est. 1RM: ${benchTop.kg&&benchTop.reps?parseFloat((parseFloat(benchTop.kg)+parseFloat(benchTop.kg)*parseFloat(benchTop.reps)*0.0333).toFixed(1)):"—"}kg</div></div>
+  </div>`:`<div class="lift-row"><div style="font-size:13px;color:#9a9690;font-style:italic">No Workout A sessions yet</div></div>`}
+  ${pullupTop?`<div class="lift-row">
+    <div><div style="font-size:13px;font-weight:700">Weighted Pull-Ups &mdash; Set 1</div><div style="font-size:11px;color:#9a9690">${pullupTop.date}</div></div>
+    <div style="text-align:right"><div style="font-size:16px;font-weight:700;color:#1a7fa8">${pullupTop.kg}kg &times; ${pullupTop.reps} reps</div></div>
+  </div>`:`<div class="lift-row"><div style="font-size:13px;color:#9a9690;font-style:italic">No Workout B sessions yet</div></div>`}
+</div>
+
+<!-- MACRO TARGETS -->
+${macros?`<div class="section">
+  <div class="section-title">&#x1F37D; MyFitnessPal Targets This Week</div>
+  <span class="phase-badge phase-${phase}">${phaseLabel[phase]||phase}</span>
+  <div class="macro-row">
+    <div class="macro-tile"><div class="macro-val">${macros.cal}</div><div class="macro-lbl">Calories</div></div>
+    <div class="macro-tile"><div class="macro-val">${macros.protein}g</div><div class="macro-lbl">Protein</div></div>
+    <div class="macro-tile"><div class="macro-val">${macros.carbs}g</div><div class="macro-lbl">Carbs</div></div>
+    <div class="macro-tile"><div class="macro-val">${macros.fat}g</div><div class="macro-lbl">Fats</div></div>
+  </div>
+</div>`:""}
+
+<!-- ALL CHECK-IN HISTORY -->
+${stats.length?`<div class="section">
+  <div class="section-title">&#x1F4C5; Full Check-In History</div>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <tr style="border-bottom:2px solid #c8960a">
+      <th style="text-align:left;padding:6px 8px;color:#9a9690;font-weight:600">Date</th>
+      <th style="text-align:right;padding:6px 8px;color:#9a9690;font-weight:600">Weight</th>
+      <th style="text-align:right;padding:6px 8px;color:#9a9690;font-weight:600">Waist</th>
+      <th style="text-align:right;padding:6px 8px;color:#9a9690;font-weight:600">BF%</th>
+      <th style="text-align:right;padding:6px 8px;color:#9a9690;font-weight:600">Fat</th>
+      <th style="text-align:right;padding:6px 8px;color:#9a9690;font-weight:600">Lean</th>
+    </tr>
+    ${[...stats].reverse().map((s,i)=>{
+      const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;
+      const bf=sHt&&sNeck?navyBF(s.waistCm,sNeck,sHt):null;
+      const fat=bf?parseFloat((s.weightKg*bf/100).toFixed(1)):null;
+      const lean=fat?parseFloat((s.weightKg-fat).toFixed(1)):null;
+      const isLatest=i===0;
+      return`<tr style="border-bottom:1px solid #e8e4dc;background:${isLatest?"#fef9e8":"transparent"}">
+        <td style="padding:7px 8px;font-weight:${isLatest?"700":"400"}">${s.date}${isLatest?" ◀ latest":""}</td>
+        <td style="text-align:right;padding:7px 8px;font-weight:700">${kgToW(s.weightKg)}${wLbl()}</td>
+        <td style="text-align:right;padding:7px 8px">${cmToM(s.waistCm)}${mLbl()}</td>
+        <td style="text-align:right;padding:7px 8px;color:${bf>25?"#c03030":bf>20?"#c8960a":"#2a7a3a"};font-weight:700">${bf?bf+"%":"—"}</td>
+        <td style="text-align:right;padding:7px 8px;color:#c03030">${fat?kgToW(fat)+""+wLbl():"—"}</td>
+        <td style="text-align:right;padding:7px 8px;color:#2a7a3a;font-weight:700">${lean?kgToW(lean)+""+wLbl():"—"}</td>
+      </tr>`;
+    }).join("")}
+  </table>
+</div>`:""}
+
+<!-- NOTES FOR CLAUDE -->
+<div class="section">
+  <div class="section-title">&#x270F; Notes for Claude (fill in before uploading)</div>
+  <div class="notes-box">
+    <div class="notes-prompt">
+      How are you feeling this week? Energy levels, sleep, hunger, any niggles or injuries?<br/><br/>
+      Are you hitting your macro targets consistently? Any days you blew it?<br/><br/>
+      How did the workouts feel? Strength going up, same, or struggling?<br/><br/>
+      Anything you want to flag or ask about?
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <span>Iron Home &bull; oliverminskip.github.io/iron-home</span>
+  <span>Generated ${new Date().toISOString().slice(0,10)}</span>
+</div>
+</body>
+</html>`;
+
+  // Open in new tab
+  const win=window.open("","_blank");
+  if(win){
+    win.document.write(reportHtml);
+    win.document.close();
+  }else{
+    showToast("Allow pop-ups to open the report");
+  }
 };
 </script>
 </body>
