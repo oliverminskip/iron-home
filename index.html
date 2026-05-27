@@ -579,10 +579,19 @@ function calcVolume(sessionData,workoutExercises){
 
 /* ═══ SESSION KEY ═══ */
 function getActiveSessionKey(){
-  // Use the start date captured when workout began, not today
+  // Use the immutable start date captured when workout began
   if(S.sessionStartDate)return`${S.activeWkId}_${S.sessionStartDate}`;
-  // Fallback for sessions already in log
-  return`${S.activeWkId}_${new Date().toISOString().slice(0,10)}`;
+  // No active session - return null-like sentinel so rWorkout shows Start screen
+  return null;
+}
+function buildNewSessionKey(){
+  // Build a unique key for a new session. If today already has a finished session,
+  // append a counter to avoid collision (e.g. A_2026-05-27_2)
+  const base=`${S.activeWkId}_${new Date().toISOString().slice(0,10)}`;
+  if(!S.log[base]||!S.log[base].finished)return base;
+  let n=2;
+  while(S.log[`${base}_${n}`]&&S.log[`${base}_${n}`].finished)n++;
+  return`${base}_${n}`;
 }
 
 /* ═══ TOAST ═══ */
@@ -633,8 +642,9 @@ function exCard(ex,ts,ps){
 /* ═══ RENDER WORKOUT TAB ═══ */
 function rWorkout(){
   const wk=WORKOUTS.find(w=>w.id===S.activeWkId);
-  const sk=getActiveSessionKey();
-  const ts=S.log[sk]||{},fin=!!ts.finished;
+  const sk=getActiveSessionKey(); // null if no active session
+  const ts=sk?S.log[sk]||{}:{};
+  const fin=sk?!!ts.finished:false;
   const isActive=!!S.sessionStartDate;
 
   // Previous session for this workout type
@@ -680,8 +690,12 @@ function rWorkout(){
 
   let bb="";
   if(!fin&&n>0)bb+=`<button class="btn-finish" onclick="openFin()">&#x1F3C1; Finish ${wk.name}</button>`;
-  if(fin)bb+=`<div class="btn-finished-state">&#x2713; ${wk.name} complete &mdash; ${vol}kg total volume</div>`;
-  if(n>0)bb+=S.confirmClear?`<div class="confirm-row"><button class="btn-confirm" onclick="clearSession()">Yes, clear</button><button class="btn-cancel" onclick="setCC(false)">Cancel</button></div>`:`<button class="btn-clear" onclick="setCC(true)">Clear session log</button>`;
+  if(fin){
+    bb+=`<div class="btn-finished-state">&#x2713; ${wk.name} complete &mdash; ${vol}kg total volume</div>`;
+    bb+=`<button class="btn-start-workout" style="margin-top:8px" onclick="startNewSession()">&#x25B6; Start New ${wk.name} Session</button>`;
+  }
+  // Clear button ONLY for in-progress (not finished) sessions with data
+  if(!fin&&n>0)bb+=S.confirmClear?`<div class="confirm-row"><button class="btn-confirm" onclick="clearSession()">Yes, clear</button><button class="btn-cancel" onclick="setCC(false)">Cancel</button></div>`:`<button class="btn-clear" onclick="setCC(true)">Clear session log</button>`;
 
   return sel+sessionHeader+warmup+rptNote+cards+`<div class="bottom-btns">${bb}</div>`;
 }
@@ -932,7 +946,7 @@ function rStats(){
 function rModal(){
   if(!S.showFinishModal)return"";
   const wk=WORKOUTS.find(w=>w.id===S.activeWkId);
-  const sk=getActiveSessionKey();const ts=S.log[sk]||{};
+  const sk=getActiveSessionKey();if(!sk)return"";const ts=S.log[sk]||{};
   const n=wk.exercises.flatMap(ex=>ex.workingSets.map((_,i)=>ts[ex.id]?.[i])).filter(s=>s?.kg||s?.reps).length;
   const vol=calcVolume(ts,wk.exercises);
   const dur=S.sessionStartTs?fmtDuration(Date.now()-S.sessionStartTs):"";
@@ -961,7 +975,8 @@ function render(){
   const sbAv=photo?`<img src="${photo}" class="sb-avatar" onerror="this.style.display='none'">`:`<div class="sb-avatar-init">${init}</div>`;
 
   // Session info for sidebar
-  const sk=getActiveSessionKey();const ts=S.log[sk]||{};
+  const sk=getActiveSessionKey();
+  const ts=sk?S.log[sk]||{}:{};
   const n=wk.exercises.flatMap(ex=>ex.workingSets.map((_,i)=>ts[ex.id]?.[i])).filter(s=>s?.kg||s?.reps).length;
 
   const tabs=TABS.map(t=>`<button class="tab-btn${S.tab===t?" active":""}" style="--accent:${accent}" onclick="setTab('${t}')">${TICONS[t]} ${TLBLS[t]}</button>`).join("");
@@ -1023,7 +1038,10 @@ window.setAnchor=id=>{S.strengthAnchor=id;render();};
 
 window.startWorkout=()=>{
   const now=new Date();
-  S.sessionStartDate=now.toISOString().slice(0,10); // Immutable key
+  // Build a unique key (handles same-day repeat sessions)
+  const newKey=buildNewSessionKey();
+  // Extract just the date+suffix part after the workout ID
+  S.sessionStartDate=newKey.replace(S.activeWkId+"_",""); // e.g. "2026-05-27" or "2026-05-27_2"
   S.sessionStartTs=Date.now();
   S.sessionElapsedMs=0;
   const sk=getActiveSessionKey();
@@ -1036,6 +1054,7 @@ window.startRest=(exId,setIdx,secs)=>{startRestTimer(exId,setIdx,secs);};
 
 window.updSet=async(eid,i,field,val)=>{
   const sk=getActiveSessionKey();
+  if(!sk)return; // No active session
   if(!S.log[sk])S.log[sk]={};
   if(!S.log[sk][eid])S.log[sk][eid]={};
   if(!S.log[sk][eid][i])S.log[sk][eid][i]={};
@@ -1045,6 +1064,7 @@ window.updSet=async(eid,i,field,val)=>{
 
 window.finSess=async()=>{
   const sk=getActiveSessionKey();
+  if(!sk)return;
   if(!S.log[sk])S.log[sk]={};
   S.log[sk].finished=true;
   S.log[sk].finishedAt=new Date().toISOString();
@@ -1061,11 +1081,23 @@ window.finSess=async()=>{
 
 window.clearSession=async()=>{
   const sk=getActiveSessionKey();
+  // Only clear in-progress sessions (not finished ones - those stay in history)
+  const sess=S.log[sk];
+  if(sess&&sess.finished){showToast("Session already saved to history");S.confirmClear=false;render();return;}
   await fbDel(sk);delete S.log[sk];
   if(S.sessionClockInterval)clearInterval(S.sessionClockInterval);
   S.sessionStartDate=null;S.sessionStartTs=null;S.sessionElapsedMs=0;
   S.activeTimers={};S.confirmClear=false;
-  showToast("Session cleared");render();
+  showToast("In-progress session cleared");render();
+};
+
+window.startNewSession=()=>{
+  // Reset session state so user can start a fresh session for the same workout type
+  // The previous finished session stays safely in history under its own date key
+  if(S.sessionClockInterval)clearInterval(S.sessionClockInterval);
+  S.sessionStartDate=null;S.sessionStartTs=null;S.sessionElapsedMs=0;
+  S.activeTimers={};S.confirmClear=false;
+  render(); // This will show the "Start Workout" screen again
 };
 
 window.delSess=async k=>{
