@@ -150,6 +150,8 @@ button{cursor:pointer;font-family:inherit}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
 /* DROP SET / CUE */
 .drop-set{margin-top:10px;font-size:12px;color:#b03030;background:#fff0f0;border:1px solid #f0b0b0;border-radius:7px;padding:9px 12px;font-weight:600}
+.drop-set-row{border-top:2px dashed #f0b0b0;margin-top:8px;padding-top:10px}
+.drop-set-row.has-entry{background:#fff5f5;margin:8px -16px 0;padding:10px 16px;border-top:2px dashed #f0b0b0}
 .cue{margin-top:12px;font-size:12px;color:#5a5650;line-height:1.8;font-style:italic;border-left:3px solid;padding-left:12px;padding-top:2px}
 /* BOTTOM BUTTONS */
 .bottom-btns{padding:16px 14px 0;display:flex;flex-direction:column;gap:10px}
@@ -447,6 +449,7 @@ const S={
   profile:{stats:[],phase:"recomp",heightCm:null,neckCm:null},
   units:{weight:"lbs",measure:"cm"},
   strengthAnchor:"A1", // A1=DB Bench, B1=Pull-Up
+  tonnageFilter:"A",
 };
 
 /* ═══ SESSION CLOCK ═══ */
@@ -601,7 +604,17 @@ window.showToast=showToast;
 
 /* ═══ RENDER HELPERS ═══ */
 function tagEl(type){const s=TS[type]||TS.Straight;return`<span class="tag" style="background:${s.bg};border-color:${s.border};color:${s.text}">${type}</span>`;}
-function prevBadge(kgRaw,reps){if(!kgRaw&&!reps)return"";const p=[];if(kgRaw)p.push(kgRaw+"kg");if(reps)p.push(reps+" reps");return`<span class="prev-tag">${p.join(" &middot; ")} &uarr;prev</span>`;}
+function prevBadge(kgRaw,reps,repRange){
+  if(!kgRaw&&!reps)return"";
+  const p=[];if(kgRaw)p.push(kgRaw+"kg");if(reps)p.push(reps+" reps");
+  let nudge="";
+  if(reps&&repRange){
+    // Extract top of range e.g. "6&ndash;8" -> 8, "12&ndash;15" -> 15
+    const nums=(repRange+"").replace(/&ndash;/g,"-").match(/\d+/g);
+    if(nums){const top=parseInt(nums[nums.length-1]);if(parseInt(reps)>=top){nudge=` <span style="color:#c8960a;font-weight:700">&#x2B06; Add weight!</span>`;}}
+  }
+  return`<span class="prev-tag">${p.join(" &middot; ")} &uarr;prev${nudge}</span>`;
+}
 function wuTbl(sets,exId,td){
   if(!sets.length)return"";
   const wuKey=exId+"_wu";
@@ -645,7 +658,7 @@ function sRow(ws,i,ex,pd,td){
     <div class="set-inputs">
       <input class="set-input${ck?" filled":""}" type="number" inputmode="decimal" placeholder="kg" value="${ck}" oninput="updSet('${ex.id}',${i},'kg',this.value)"/>
       <input class="set-input${cr?" filled":""}" type="number" inputmode="numeric" placeholder="reps" value="${cr}" oninput="updSet('${ex.id}',${i},'reps',this.value)"/>
-      ${prevBadge(pd?.[i]?.kg,pd?.[i]?.reps)}
+      ${prevBadge(pd?.[i]?.kg,pd?.[i]?.reps,ws.repRange)}
       <button id="rtbtn_${ex.id}_${i}" class="${btnCls}" onclick="startRest('${ex.id}',${i},${tSecs})">${btnTxt}</button>
     </div>
   </div>`;
@@ -659,7 +672,27 @@ function exCard(ex,ts,ps){
   let body="";
   if(isO){
     const ch=`<div class="ws-col-headers"><div class="ws-col-h"></div><div class="ws-col-h">Target</div><div class="ws-col-h">KG</div><div class="ws-col-h">Reps</div><div class="ws-col-h">Rest</div></div>`;
-    body=`<div class="ex-body">${wuTbl(ex.warmupSets,ex.id,td)}${ch}${ex.workingSets.map((ws,i)=>sRow(ws,i,ex,pd,td)).join("")}${ex.dropSet?`<div class="drop-set">DROP SET: ${ex.dropSet}</div>`:""}<div class="cue" style="border-color:${t.border}">${ex.cue}</div></div>`;
+    const dropSetRow=(()=>{
+      if(!ex.dropSet)return"";
+      const dKey="drop",dTd=td?.["drop"],dPd=pd?.["drop"];
+      const dCk=dTd?.kg||"",dCr=dTd?.reps||"",dHas=dCk||dCr;
+      const dTimer=S.activeTimers[ex.id+"_drop"];
+      let dBtnTxt="Rest",dBtnCls="btn-rest";
+      if(dTimer){if(dTimer.status==="running"){dBtnTxt=fmtSecs(Math.max(0,dTimer.secs));dBtnCls="btn-rest running";}else{dBtnTxt="Done &#x2713;";dBtnCls="btn-rest done";}}
+      return`<div class="drop-set-row${dHas?" has-entry":""}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:700;color:#b03030;min-width:56px">DROP</span>
+          <span style="font-size:12px;color:#b03030;background:#fff0f0;border:1px solid #f0b0b0;border-radius:4px;padding:2px 8px;font-weight:600">${ex.dropSet}</span>
+        </div>
+        <div class="set-inputs">
+          <input class="set-input${dCk?" filled":""}" type="number" inputmode="decimal" placeholder="kg" value="${dCk}" oninput="updDrop('${ex.id}','kg',this.value)" style="border-color:${dCk?"#2a7a3a":"#f0b0b0"}"/>
+          <input class="set-input${dCr?" filled":""}" type="number" inputmode="numeric" placeholder="reps" value="${dCr}" oninput="updDrop('${ex.id}','reps',this.value)" style="border-color:${dCr?"#2a7a3a":"#f0b0b0"}"/>
+          ${dPd?.kg||dPd?.reps?`<span class="prev-tag">${dPd.kg?dPd.kg+"kg":""} ${dPd.reps?dPd.reps+" reps":""} &uarr;prev</span>`:""}
+          <button id="rtbtn_${ex.id}_drop" class="${dBtnCls}" onclick="startRest('${ex.id}','drop',45)">${dBtnTxt}</button>
+        </div>
+      </div>`;
+    })();
+    body=`<div class="ex-body">${wuTbl(ex.warmupSets,ex.id,td)}${ch}${ex.workingSets.map((ws,i)=>sRow(ws,i,ex,pd,td)).join("")}${dropSetRow}<div class="cue" style="border-color:${t.border}">${ex.cue}</div></div>`;
   }
   return`<div class="ex-card${isO?" open":""}" style="border-left-color:${isO?t.border:"#ddd9d0"}"><div class="ex-header" onclick="togEx('${ex.id}')"><div style="flex:1;padding-right:10px"><div class="ex-name">${ex.name}${stat}</div>${tagEl(ex.type)}</div><div class="ex-toggle">${isO?"&minus;":"+"}</div></div>${body}</div>`;
 }
@@ -710,10 +743,11 @@ function rWorkout(){
   </div>`;
 
   const warmup=`<div class="warmup-box"><div class="warmup-title">General Warm-Up &mdash; 5&ndash;8 min</div>${wk.warmup.map(w=>`<div class="warmup-item"><span class="warmup-arrow">&rarr;</span>${w}</div>`).join("")}</div>`;
-  const rptNote=`<div class="rpt-note"><div class="rpt-note-title">RPT &mdash; Heaviest set first</div><div class="rpt-note-body">Hit top of rep range on ALL sets &rarr; add weight next session. Always log in <strong>kg</strong>.</div></div>`;
+  const rptNote=`<div class="rpt-note"><div class="rpt-note-title">RPT &mdash; Heaviest set first</div><div class="rpt-note-body"><strong>RPT:</strong> Heaviest set first, drop 10&ndash;15% each set. Hit top of rep range &rarr; add weight next session.<br/><strong>Straight:</strong> Same weight across all sets. Hit top of range on all sets &rarr; add weight next session. Always log in <strong>kg</strong>.</div></div>`;
   const cards=`<div class="ex-list">${wk.exercises.map(ex=>exCard(ex,ts,ps)).join("")}</div>`;
 
   let bb="";
+  if(isActive&&!fin)bb+=`<button style="width:100%;padding:10px;background:none;border:1.5px solid #ddd9d0;border-radius:10px;color:#9a9690;font-size:12px;font-weight:600;margin-bottom:2px" onclick="cancelWorkout()">&#x2715; Discard &amp; Cancel Session</button>`;
   if(!fin&&n>0)bb+=`<button class="btn-finish" onclick="openFin()">&#x1F3C1; Finish ${wk.name}</button>`;
   if(fin){
     bb+=`<div class="btn-finished-state">&#x2713; ${wk.name} complete &mdash; ${vol}kg total volume</div>`;
@@ -741,12 +775,14 @@ function rHistory(){
           const wuKey=ex.id+"_wu";const wuD=dd[wuKey];
           const wuRows=ex.warmupSets.map((ws,i)=>{const s=wuD?.[i];if(!s||(!s.kg&&!s.reps))return"";return`<div class="hist-set-row" style="opacity:.7"><span class="hist-set-lbl" style="color:#c8960a">${ws.label}</span>${s.kg?`<span class="hist-kg">${s.kg}kg</span>`:""}${s.reps?`<span class="hist-reps">${s.reps} reps</span>`:""}</div>`;}).join("");
           const wsRows=ex.workingSets.map((ws,i)=>{const s=ed[i];if(!s||(!s.kg&&!s.reps))return"";return`<div class="hist-set-row"><span class="hist-set-lbl">${ws.label}</span>${s.kg?`<span class="hist-kg">${s.kg}kg</span>`:""}${s.reps?`<span class="hist-reps">${s.reps} reps</span>`:""}</div>`;}).join("");
-          return`<div class="hist-ex-name">${ex.name}</div>${wuRows}${wsRows}`;
+          const dropS=ex.dropSet&&ed["drop"]&&(ed["drop"].kg||ed["drop"].reps)?`<div class="hist-set-row" style="border-left:2px dashed #f0b0b0;padding-left:8px;margin-left:4px"><span class="hist-set-lbl" style="color:#c03030">DROP</span>${ed["drop"].kg?`<span class="hist-kg" style="color:#c03030">${ed["drop"].kg}kg</span>`:""}${ed["drop"].reps?`<span class="hist-reps">${ed["drop"].reps} reps</span>`:""}</div>`:"";
+          return`<div class="hist-ex-name">${ex.name}</div>${wuRows}${wsRows}${dropS}`;
         })()}).join("");
       const del=S.confirmDeleteKey===key?`<div class="confirm-row" style="margin-top:12px"><button class="btn-delete-yes" onclick="delSess('${key}')">Yes, delete</button><button class="btn-delete-no" onclick="setDC(null)">Cancel</button></div>`:`<button class="btn-delete" onclick="setDC('${key}')">Delete session</button>`;
       body=`<div class="hist-body">${rows}<div class="hist-vol">Total volume: ${vol}kg</div>${del}</div>`;
     }
-    return`<div class="hist-card" style="border-left-color:${wk.accent}"><div class="hist-header" onclick="togEx('h_${key}')"><div><div class="hist-day-name">${wk.emoji} ${wk.name}</div><div class="hist-meta">${date} &mdash; ${vol}kg volume</div></div><div style="font-size:20px;color:#9a9690">${isO?"&minus;":"+"}</div></div>${body}</div>`;
+    const dur=dd.durationMs?fmtDuration(dd.durationMs):"";
+    return`<div class="hist-card" style="border-left-color:${wk.accent}"><div class="hist-header" onclick="togEx('h_${key}')"><div><div class="hist-day-name">${wk.emoji} ${wk.name}</div><div class="hist-meta">${date} &mdash; ${vol}kg${dur?" &mdash; &#x23F1; "+dur:""}</div></div><div style="font-size:20px;color:#9a9690">${isO?"&minus;":"+"}</div></div>${body}</div>`;
   }).join("");
   return`<div class="history-wrap"><div class="section-title">Workout History</div>${cards}</div>`;
 }
@@ -841,10 +877,11 @@ function rStats(){
       </div>
       ${kino?`<div class="kino-bar-wrap">
         <div class="stats-card-title" style="margin-top:6px;margin-bottom:8px">&#x1F4D0; Kinobody Waist Ratio</div>
-        <div class="kino-bar-labels"><span>Current: ${(latest.waistCm/hCm*100).toFixed(1)}%</span><span style="color:#2a7a3a">Ideal: 44.7%</span></div>
+        <div class="kino-bar-labels"><span>Current: ${(latest.waistCm/hCm*100).toFixed(1)}% of height</span><span style="color:#2a7a3a">&#x2193; Ideal: 44.7%</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:#bbb;margin-bottom:3px"><span>35%</span><span>45%</span><span>55%</span></div>
         <div class="kino-bar-track">
-          <div class="kino-bar-fill" style="width:${Math.min(100,(latest.waistCm/hCm*100/60)*100).toFixed(1)}%;background:${ratioColor}"></div>
-          <div class="kino-marker" style="left:${((44.7/60)*100).toFixed(1)}%"></div>
+          <div class="kino-bar-fill" style="width:${Math.min(100,Math.max(0,((latest.waistCm/hCm*100-35)/20)*100)).toFixed(1)}%;background:${ratioColor}"></div>
+          <div class="kino-marker" style="left:${(((44.7-35)/20)*100).toFixed(1)}%"></div>
         </div>
         <div class="kino-status" style="color:${ratioColor}">${ratioMsg}</div>
         <div style="font-size:11px;color:#9a9690;margin-top:4px">Ideal waist: ${cmToM(kino.ideal).toString().slice(0,4)}${mLbl()}&nbsp;&bull;&nbsp;Yours: ${cmToM(latest.waistCm).toString().slice(0,4)}${mLbl()}</div>
@@ -973,27 +1010,52 @@ function rStats(){
     }
   }
 
-  // Graph 3: Session Tonnage — works as soon as any sessions exist
+  // Graph 3: Session Tonnage — filterable by workout, with date labels
   {
-    const tonnageByWk={A:[],B:[],C:[]};
-    WORKOUTS.forEach(wk=>{
-      Object.entries(S.log).filter(([k,d])=>d.finished&&k.startsWith(wk.id+"_")).sort((a,b)=>a[0].localeCompare(b[0])).slice(-8).forEach(([key,d])=>{
-        tonnageByWk[wk.id].push(calcVolume(d,wk.exercises));
-      });
-    });
-    const maxT=WORKOUTS.map(w=>Math.max(...(tonnageByWk[w.id].length?tonnageByWk[w.id]:[0]))).reduce((a,b)=>Math.max(a,b),0);
-    if(maxT>0){
-      const WW=320,HH=110;
-      const colors={"A":"#c8960a","B":"#1a7fa8","C":"#b83030"};
-      let tonnageSvg=`<svg class="chart-svg" viewBox="0 0 ${WW} ${HH}" width="100%">`;
-      WORKOUTS.forEach(wk=>{
-        const vals=tonnageByWk[wk.id];
-        if(!vals.length)return;
-        const mn3=0,mx3=maxT+50;
-        tonnageSvg+=svgLine(vals,mn3,mx3,colors[wk.id],"");
-      });
-      tonnageSvg+=`</svg>`;
-      chartsHtml+=`<div class="stats-card"><div class="stats-card-title">&#x1F3CB; Session Tonnage (kg)</div><div class="chart-wrap">${tonnageSvg}</div><div class="chart-legend">${WORKOUTS.map(w=>`<div class="legend-item"><div class="legend-dot" style="background:${colors[w.id]}"></div>${w.name}</div>`).join("")}</div></div>`;
+    const colors={"A":"#c8960a","B":"#1a7fa8","C":"#b83030"};
+    const activeFilter=S.tonnageFilter||"A";
+    const filtSessions=Object.entries(S.log)
+      .filter(([k,d])=>d.finished&&k.startsWith(activeFilter+"_"))
+      .sort((a,b)=>a[0].localeCompare(b[0]))
+      .slice(-10);
+    const wkForTon=WORKOUTS.find(w=>w.id===activeFilter);
+    const tonnageVals=filtSessions.map(([k,d])=>calcVolume(d,wkForTon.exercises));
+    const tonnageDates=filtSessions.map(([k])=>k.split("_")[1]);
+    const anySession=Object.values(S.log).some(d=>d.finished);
+    if(anySession){
+      const WW=320,HH=120,ppx=12,ppy=10;
+      const maxTon=tonnageVals.length?Math.max(...tonnageVals)+200:1000;
+      // Build SVG with clickable dots and date x-axis
+      let tonSvg=`<svg class="chart-svg" viewBox="0 0 ${WW} ${HH}" width="100%">`;
+      if(tonnageVals.length>=2){
+        // Line
+        const pts2=tonnageVals.map((v,i)=>{const x=ppx+i/(tonnageVals.length-1||1)*(WW-ppx*2);const y=HH-ppy*2-((v/maxTon)*(HH-ppy*3));return`${x.toFixed(1)},${y.toFixed(1)}`;}).join(" ");
+        tonSvg+=`<polyline points="${pts2}" fill="none" stroke="${colors[activeFilter]}" stroke-width="2" stroke-linejoin="round"/>`;
+        // Dots with tooltips
+        tonnageVals.forEach((v,i)=>{
+          const x=ppx+i/(tonnageVals.length-1||1)*(WW-ppx*2);
+          const y=HH-ppy*2-((v/maxTon)*(HH-ppy*3));
+          tonSvg+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${colors[activeFilter]}" onclick="showTonnageTip('${tonnageDates[i]||""}',${v})" style="cursor:pointer"/>`;
+          // Date label below x-axis (show first and last only on mobile)
+          if(i===0||i===tonnageVals.length-1||tonnageVals.length<=4){
+            const lbl=(tonnageDates[i]||"").slice(5); // MM-DD
+            tonSvg+=`<text x="${x.toFixed(1)}" y="${(HH-2).toFixed(1)}" text-anchor="middle" style="font-size:8px;fill:#9a9690">${lbl}</text>`;
+          }
+        });
+      }else if(tonnageVals.length===1){
+        const x=WW/2,y=HH/2;
+        tonSvg+=`<circle cx="${x}" cy="${y}" r="4" fill="${colors[activeFilter]}" onclick="showTonnageTip('${tonnageDates[0]||""}',${tonnageVals[0]})" style="cursor:pointer"/>`;
+      }
+      tonSvg+=`</svg>`;
+      // Workout filter buttons
+      const filterBtns=WORKOUTS.map(w=>`<button style="padding:5px 12px;font-size:11px;font-weight:700;border:1.5px solid ${activeFilter===w.id?colors[w.id]:"#ddd9d0"};border-radius:7px;background:${activeFilter===w.id?"#fef9e8":"#f5f4f0"};color:${activeFilter===w.id?colors[w.id]:"#5a5650"};cursor:pointer" onclick="setTonnageFilter('${w.id}')">${w.emoji} ${w.name}</button>`).join("");
+      chartsHtml+=`<div class="stats-card">
+        <div class="stats-card-title">&#x1F3CB; Session Tonnage (kg)</div>
+        <div id="tonnage-tip" style="display:none;font-size:12px;font-weight:700;color:#1a1814;background:#fef9e8;border:1px solid #e8c870;border-radius:6px;padding:5px 12px;margin-bottom:8px;text-align:center"></div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">${filterBtns}</div>
+        <div class="chart-wrap">${tonSvg}</div>
+        ${tonnageVals.length===0?`<div style="font-size:13px;color:#9a9690;padding:12px 0;text-align:center;font-style:italic">No ${wkForTon.name} sessions yet.</div>`:""}
+      </div>`;
     }
   }
 
@@ -1062,6 +1124,16 @@ function render(){
       <hr class="sb-divider"/>
       <div class="sb-user" onclick="toggleMenu()">${sbAv}<div class="sb-user-name">${name}</div><button class="btn-signout" onclick="event.stopPropagation();doSignOut()">Sign out</button></div>
       ${n>0?`<div class="sb-stat-pill"><div class="sb-stat-num" style="color:${accent}">${n}</div><div class="sb-stat-lbl">sets today</div></div>`:""}
+      ${(()=>{
+        const latest=S.profile.stats?.length?S.profile.stats[S.profile.stats.length-1]:null;
+        if(!latest)return"";
+        const bf=S.profile.heightCm&&S.profile.neckCm?navyBF(latest.waistCm,S.profile.neckCm,S.profile.heightCm):null;
+        return`<div class="sb-stat-pill" style="margin-top:6px;background:#f8f6f2;border-color:#e0dcd4">
+          <div style="font-size:12px;font-weight:700;color:#1a1814">${kgToW(latest.weightKg)}${wLbl()}</div>
+          ${bf?`<div style="font-size:10px;color:#c8960a;font-weight:700">${bf}% BF</div>`:""}
+          <div class="sb-stat-lbl">last check-in</div>
+        </div>`;
+      })()}
       ${S.sessionStartTs&&!ts.finished?`<div class="sb-stat-pill" style="margin-top:6px;background:#edf7ef;border-color:#a0d0a8"><div class="sb-stat-num" style="color:#2a7a3a;font-size:16px" id="sb-clock">${fmtDuration(S.sessionElapsedMs)}</div><div class="sb-stat-lbl">session time</div></div>`:""}
     </div>
     <div class="main-col">
@@ -1132,6 +1204,16 @@ window.updWu=async(eid,i,field,val)=>{
   await fbSave(sk,S.log[sk]);
 };
 
+window.updDrop=async(eid,field,val)=>{
+  const sk=getActiveSessionKey();
+  if(!sk)return;
+  if(!S.log[sk])S.log[sk]={};
+  if(!S.log[sk][eid])S.log[sk][eid]={};
+  if(!S.log[sk][eid]["drop"])S.log[sk][eid]["drop"]={};
+  S.log[sk][eid]["drop"][field]=val;
+  await fbSave(sk,S.log[sk]);
+};
+
 window.updSet=async(eid,i,field,val)=>{
   const sk=getActiveSessionKey();
   if(!sk)return; // No active session
@@ -1171,6 +1253,20 @@ window.clearSession=async()=>{
   showToast("In-progress session cleared");render();
 };
 
+window.cancelWorkout=async()=>{
+  // Discard in-progress session entirely — no save, no history entry
+  const sk=getActiveSessionKey();
+  if(sk&&S.log[sk]&&!S.log[sk].finished){
+    await fbDel(sk);
+    delete S.log[sk];
+  }
+  if(S.sessionClockInterval)clearInterval(S.sessionClockInterval);
+  S.sessionStartDate=null;S.sessionStartTs=null;S.sessionElapsedMs=0;
+  S.activeTimers={};S.confirmClear=false;
+  showToast("Session discarded");
+  render();
+};
+
 window.startNewSession=()=>{
   // Reset session state so user can start a fresh session for the same workout type
   // The previous finished session stays safely in history under its own date key
@@ -1205,6 +1301,14 @@ window.logStats=async()=>{
   await fbSaveProfile(S.profile);showToast("Check-in logged!");render();
 };
 
+window.setTonnageFilter=id=>{S.tonnageFilter=id;render();};
+window.showTonnageTip=(date,vol)=>{
+  const el=document.getElementById("tonnage-tip");
+  if(!el)return;
+  el.style.display="block";
+  el.textContent=`${date}: ${vol}kg total volume`;
+  setTimeout(()=>{if(el)el.style.display="none";},3000);
+};
 window.delStat=async idx=>{
   S.profile.stats.splice(idx,1);
   await fbSaveProfile(S.profile);showToast("Entry deleted");render();
