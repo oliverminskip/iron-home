@@ -602,7 +602,32 @@ window.showToast=showToast;
 /* ═══ RENDER HELPERS ═══ */
 function tagEl(type){const s=TS[type]||TS.Straight;return`<span class="tag" style="background:${s.bg};border-color:${s.border};color:${s.text}">${type}</span>`;}
 function prevBadge(kgRaw,reps){if(!kgRaw&&!reps)return"";const p=[];if(kgRaw)p.push(kgRaw+"kg");if(reps)p.push(reps+" reps");return`<span class="prev-tag">${p.join(" &middot; ")} &uarr;prev</span>`;}
-function wuTbl(sets){if(!sets.length)return"";return`<div class="wu-table"><div class="wu-table-title">Warm-Up Sets &mdash; not logged</div>${sets.map(s=>`<div class="wu-row"><span class="wu-label">${s.label}</span><span class="wu-pct">${s.pct}</span><span class="wu-reps">${s.reps} reps</span><span class="wu-rest">${s.rest}</span></div>`).join("")}</div>`;}
+function wuTbl(sets,exId,td){
+  if(!sets.length)return"";
+  const wuKey=exId+"_wu";
+  const wuData=td?.[wuKey]||{};
+  const rows=sets.map((s,i)=>{
+    const ck=wuData[i]?.kg||"",cr=wuData[i]?.reps||"",has=ck||cr;
+    return`<div class="wu-row" style="${has?"background:#f0faf2;margin:0 -12px;padding:5px 12px;border-radius:4px":""}">
+      <span class="wu-label">${s.label}</span>
+      <span class="wu-pct" style="font-size:11px;color:#9a9690">${s.pct} &bull; ${s.reps}r &bull; ${s.rest}</span>
+      <input class="wu-input${ck?" wu-filled":""}" type="number" inputmode="decimal" placeholder="kg" value="${ck}"
+        oninput="updWu('${exId}',${i},'kg',this.value)" style="width:56px;font-size:13px;padding:4px 7px;border:1.5px solid ${ck?"#2a7a3a":"#d0ccc4"};border-radius:6px;background:#f8f6f2;font-family:inherit;font-weight:600;outline:none"/>
+      <input class="wu-input${cr?" wu-filled":""}" type="number" inputmode="numeric" placeholder="reps" value="${cr}"
+        oninput="updWu('${exId}',${i},'reps',this.value)" style="width:56px;font-size:13px;padding:4px 7px;border:1.5px solid ${cr?"#2a7a3a":"#d0ccc4"};border-radius:6px;background:#f8f6f2;font-family:inherit;font-weight:600;outline:none"/>
+    </div>`;
+  }).join("");
+  return`<div class="wu-table">
+    <div class="wu-table-title">Warm-Up Sets <span style="font-size:9px;color:#c8960a;letter-spacing:1px">(log optional)</span></div>
+    <div style="display:grid;grid-template-columns:42px 1fr 58px 58px;gap:6px;padding:2px 0 6px;border-bottom:1px solid #f0e0b0;margin-bottom:4px">
+      <span style="font-size:9px;color:#9a9690;letter-spacing:1px;text-transform:uppercase"></span>
+      <span style="font-size:9px;color:#9a9690;letter-spacing:1px;text-transform:uppercase">Pct &bull; Reps &bull; Rest</span>
+      <span style="font-size:9px;color:#9a9690;letter-spacing:1px;text-transform:uppercase">KG</span>
+      <span style="font-size:9px;color:#9a9690;letter-spacing:1px;text-transform:uppercase">Reps</span>
+    </div>
+    ${rows}
+  </div>`;
+}
 
 function sRow(ws,i,ex,pd,td){
   const ck=td?.[i]?.kg||"",cr=td?.[i]?.reps||"",has=ck||cr;
@@ -634,7 +659,7 @@ function exCard(ex,ts,ps){
   let body="";
   if(isO){
     const ch=`<div class="ws-col-headers"><div class="ws-col-h"></div><div class="ws-col-h">Target</div><div class="ws-col-h">KG</div><div class="ws-col-h">Reps</div><div class="ws-col-h">Rest</div></div>`;
-    body=`<div class="ex-body">${wuTbl(ex.warmupSets)}${ch}${ex.workingSets.map((ws,i)=>sRow(ws,i,ex,pd,td)).join("")}${ex.dropSet?`<div class="drop-set">DROP SET: ${ex.dropSet}</div>`:""}<div class="cue" style="border-color:${t.border}">${ex.cue}</div></div>`;
+    body=`<div class="ex-body">${wuTbl(ex.warmupSets,ex.id,td)}${ch}${ex.workingSets.map((ws,i)=>sRow(ws,i,ex,pd,td)).join("")}${ex.dropSet?`<div class="drop-set">DROP SET: ${ex.dropSet}</div>`:""}<div class="cue" style="border-color:${t.border}">${ex.cue}</div></div>`;
   }
   return`<div class="ex-card${isO?" open":""}" style="border-left-color:${isO?t.border:"#ddd9d0"}"><div class="ex-header" onclick="togEx('${ex.id}')"><div style="flex:1;padding-right:10px"><div class="ex-name">${ex.name}${stat}</div>${tagEl(ex.type)}</div><div class="ex-toggle">${isO?"&minus;":"+"}</div></div>${body}</div>`;
 }
@@ -712,7 +737,12 @@ function rHistory(){
     const vol=calcVolume(dd,wk.exercises);
     let body="";
     if(isO){
-      const rows=wk.exercises.map(ex=>{const ed=dd[ex.id];if(!ed)return"";const hd=Object.values(ed).some(s=>s&&(s.kg||s.reps));if(!hd)return"";return`<div class="hist-ex-name">${ex.name}</div>`+ex.workingSets.map((ws,i)=>{const s=ed[i];if(!s||(!s.kg&&!s.reps))return"";return`<div class="hist-set-row"><span class="hist-set-lbl">${ws.label}</span>${s.kg?`<span class="hist-kg">${s.kg}kg</span>`:""}${s.reps?`<span class="hist-reps">${s.reps} reps</span>`:""}</div>`;}).join("");}).join("");
+      const rows=wk.exercises.map(ex=>{const ed=dd[ex.id];if(!ed)return"";const hd=Object.values(ed).some(s=>s&&(s.kg||s.reps));if(!hd)return"";return(()=>{
+          const wuKey=ex.id+"_wu";const wuD=dd[wuKey];
+          const wuRows=ex.warmupSets.map((ws,i)=>{const s=wuD?.[i];if(!s||(!s.kg&&!s.reps))return"";return`<div class="hist-set-row" style="opacity:.7"><span class="hist-set-lbl" style="color:#c8960a">${ws.label}</span>${s.kg?`<span class="hist-kg">${s.kg}kg</span>`:""}${s.reps?`<span class="hist-reps">${s.reps} reps</span>`:""}</div>`;}).join("");
+          const wsRows=ex.workingSets.map((ws,i)=>{const s=ed[i];if(!s||(!s.kg&&!s.reps))return"";return`<div class="hist-set-row"><span class="hist-set-lbl">${ws.label}</span>${s.kg?`<span class="hist-kg">${s.kg}kg</span>`:""}${s.reps?`<span class="hist-reps">${s.reps} reps</span>`:""}</div>`;}).join("");
+          return`<div class="hist-ex-name">${ex.name}</div>${wuRows}${wsRows}`;
+        })()}).join("");
       const del=S.confirmDeleteKey===key?`<div class="confirm-row" style="margin-top:12px"><button class="btn-delete-yes" onclick="delSess('${key}')">Yes, delete</button><button class="btn-delete-no" onclick="setDC(null)">Cancel</button></div>`:`<button class="btn-delete" onclick="setDC('${key}')">Delete session</button>`;
       body=`<div class="hist-body">${rows}<div class="hist-vol">Total volume: ${vol}kg</div>${del}</div>`;
     }
@@ -926,7 +956,20 @@ function rStats(){
         ${strengthPts.filter(Boolean).length<3?`<div style="font-size:11px;color:#9a9690;margin-top:8px;font-style:italic">Keep logging &mdash; trend line builds after 3+ sessions.</div>`:""}
       </div>`;
     } else if(strengthPts.filter(Boolean).length===1){
-      chartsHtml+=`<div class="stats-card"><div class="stats-card-title">&#x1F4AA; Strength Progress</div><div style="font-size:13px;color:#9a9690;padding:8px 0;line-height:1.7">1 session logged for ${anchorExObj?.name||"anchor lift"}. Complete one more ${wkId==="A"?"Workout A":"Workout B"} to see your strength trend.</div></div>`;
+      chartsHtml+=`<div class="stats-card"><div class="stats-card-title">&#x1F4AA; Strength Progress (Est. 1RM)</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          ${["A1","B1"].map(id=>{const wk2=WORKOUTS.find(w=>w.id===id[0]);const ex2=wk2?.exercises.find(ex=>ex.id===id);if(!ex2)return"";const active=S.strengthAnchor===id;return`<button style="padding:6px 12px;font-size:11px;font-weight:700;border:1.5px solid ${active?"#c8960a":"#ddd9d0"};border-radius:7px;background:${active?"#fef9e8":"#f5f4f0"};color:${active?"#8a6a00":"#5a5650"};cursor:pointer" onclick="setAnchor('${id}')">${ex2.name}</button>`;}).join("")}
+        </div>
+        <div style="font-size:13px;color:#9a9690;padding:8px 0;line-height:1.7">1 session logged. Complete one more ${wkId==="A"?"Workout A":"Workout B"} to see your strength trend.</div>
+      </div>`;
+    } else {
+      // Zero sessions for this anchor — show placeholder with switcher still visible
+      chartsHtml+=`<div class="stats-card"><div class="stats-card-title">&#x1F4AA; Strength Progress (Est. 1RM)</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          ${["A1","B1"].map(id=>{const wk2=WORKOUTS.find(w=>w.id===id[0]);const ex2=wk2?.exercises.find(ex=>ex.id===id);if(!ex2)return"";const active=S.strengthAnchor===id;return`<button style="padding:6px 12px;font-size:11px;font-weight:700;border:1.5px solid ${active?"#c8960a":"#ddd9d0"};border-radius:7px;background:${active?"#fef9e8":"#f5f4f0"};color:${active?"#8a6a00":"#5a5650"};cursor:pointer" onclick="setAnchor('${id}')">${ex2.name}</button>`;}).join("")}
+        </div>
+        <div style="font-size:13px;color:#9a9690;padding:16px 0;text-align:center;line-height:1.7;font-style:italic">No ${wkId==="A"?"Workout A":"Workout B"} sessions logged yet.<br/>Complete a session to start tracking ${anchorExObj?.name||"this lift"}.</div>
+      </div>`;
     }
   }
 
@@ -1077,6 +1120,17 @@ window.startWorkout=()=>{
 };
 
 window.startRest=(exId,setIdx,secs)=>{startRestTimer(exId,setIdx,secs);};
+
+window.updWu=async(eid,i,field,val)=>{
+  const sk=getActiveSessionKey();
+  if(!sk)return;
+  if(!S.log[sk])S.log[sk]={};
+  const wuKey=eid+"_wu";
+  if(!S.log[sk][wuKey])S.log[sk][wuKey]={};
+  if(!S.log[sk][wuKey][i])S.log[sk][wuKey][i]={};
+  S.log[sk][wuKey][i][field]=val;
+  await fbSave(sk,S.log[sk]);
+};
 
 window.updSet=async(eid,i,field,val)=>{
   const sk=getActiveSessionKey();
