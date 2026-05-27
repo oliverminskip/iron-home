@@ -615,13 +615,15 @@ function prevBadge(kgRaw,reps,repRange){
   }
   return`<span class="prev-tag">${p.join(" &middot; ")} &uarr;prev${nudge}</span>`;
 }
-function wuTbl(sets,exId,ts){
+function wuTbl(sets,exId,ts,ps){
   if(!sets.length)return"";
   const wuKey=exId+"_wu";
-  // Wu data lives at session level: ts[exId+"_wu"], NOT inside ts[exId]
-  const wuData=ts?.[wuKey]||{};
+  const wuData=ts?.[wuKey]||{};       // current session warm-up data
+  const prevWuData=ps?.[wuKey]||{};   // previous session warm-up data for reference
   const rows=sets.map((s,i)=>{
     const ck=wuData[i]?.kg||"",cr=wuData[i]?.reps||"",has=ck||cr;
+    const pk=prevWuData[i]?.kg||"",pr=prevWuData[i]?.reps||"";
+    const prevBadgeHtml=(pk||pr)?`<span class="prev-tag" style="font-size:10px">${pk?pk+"kg":""}${pk&&pr?" &middot; ":""}${pr?pr+" reps":""} &uarr;prev</span>`:"";
     return`<div class="wu-row" style="${has?"background:#f0faf2;margin:0 -12px;padding:5px 12px;border-radius:4px":""}">
       <span class="wu-label">${s.label}</span>
       <span class="wu-pct" style="font-size:11px;color:#9a9690">${s.pct} &bull; ${s.reps}r &bull; ${s.rest}</span>
@@ -629,6 +631,7 @@ function wuTbl(sets,exId,ts){
         oninput="updWu('${exId}',${i},'kg',this.value)" style="width:56px;font-size:13px;padding:4px 7px;border:1.5px solid ${ck?"#2a7a3a":"#d0ccc4"};border-radius:6px;background:#f8f6f2;font-family:inherit;font-weight:600;outline:none"/>
       <input class="wu-input${cr?" wu-filled":""}" type="number" inputmode="numeric" placeholder="reps" value="${cr}"
         oninput="updWu('${exId}',${i},'reps',this.value)" style="width:56px;font-size:13px;padding:4px 7px;border:1.5px solid ${cr?"#2a7a3a":"#d0ccc4"};border-radius:6px;background:#f8f6f2;font-family:inherit;font-weight:600;outline:none"/>
+      ${prevBadgeHtml}
     </div>`;
   }).join("");
   return`<div class="wu-table">
@@ -693,7 +696,7 @@ function exCard(ex,ts,ps){
         </div>
       </div>`;
     })();
-    body=`<div class="ex-body">${wuTbl(ex.warmupSets,ex.id,ts)}${ch}${ex.workingSets.map((ws,i)=>sRow(ws,i,ex,pd,td)).join("")}${dropSetRow}<div class="cue" style="border-color:${t.border}">${ex.cue}</div></div>`;
+    body=`<div class="ex-body">${wuTbl(ex.warmupSets,ex.id,ts,ps)}${ch}${ex.workingSets.map((ws,i)=>sRow(ws,i,ex,pd,td)).join("")}${dropSetRow}<div class="cue" style="border-color:${t.border}">${ex.cue}</div></div>`;
   }
   return`<div class="ex-card${isO?" open":""}" style="border-left-color:${isO?t.border:"#ddd9d0"}"><div class="ex-header" onclick="togEx('${ex.id}')"><div style="flex:1;padding-right:10px"><div class="ex-name">${ex.name}${stat}</div>${tagEl(ex.type)}</div><div class="ex-toggle">${isO?"&minus;":"+"}</div></div>${body}</div>`;
 }
