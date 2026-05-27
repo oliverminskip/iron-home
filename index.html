@@ -615,10 +615,11 @@ function prevBadge(kgRaw,reps,repRange){
   }
   return`<span class="prev-tag">${p.join(" &middot; ")} &uarr;prev${nudge}</span>`;
 }
-function wuTbl(sets,exId,td){
+function wuTbl(sets,exId,ts){
   if(!sets.length)return"";
   const wuKey=exId+"_wu";
-  const wuData=td?.[wuKey]||{};
+  // Wu data lives at session level: ts[exId+"_wu"], NOT inside ts[exId]
+  const wuData=ts?.[wuKey]||{};
   const rows=sets.map((s,i)=>{
     const ck=wuData[i]?.kg||"",cr=wuData[i]?.reps||"",has=ck||cr;
     return`<div class="wu-row" style="${has?"background:#f0faf2;margin:0 -12px;padding:5px 12px;border-radius:4px":""}">
@@ -692,7 +693,7 @@ function exCard(ex,ts,ps){
         </div>
       </div>`;
     })();
-    body=`<div class="ex-body">${wuTbl(ex.warmupSets,ex.id,td)}${ch}${ex.workingSets.map((ws,i)=>sRow(ws,i,ex,pd,td)).join("")}${dropSetRow}<div class="cue" style="border-color:${t.border}">${ex.cue}</div></div>`;
+    body=`<div class="ex-body">${wuTbl(ex.warmupSets,ex.id,ts)}${ch}${ex.workingSets.map((ws,i)=>sRow(ws,i,ex,pd,td)).join("")}${dropSetRow}<div class="cue" style="border-color:${t.border}">${ex.cue}</div></div>`;
   }
   return`<div class="ex-card${isO?" open":""}" style="border-left-color:${isO?t.border:"#ddd9d0"}"><div class="ex-header" onclick="togEx('${ex.id}')"><div style="flex:1;padding-right:10px"><div class="ex-name">${ex.name}${stat}</div>${tagEl(ex.type)}</div><div class="ex-toggle">${isO?"&minus;":"+"}</div></div>${body}</div>`;
 }
@@ -782,7 +783,7 @@ function rHistory(){
       body=`<div class="hist-body">${rows}<div class="hist-vol">Total volume: ${vol}kg</div>${del}</div>`;
     }
     const dur=dd.durationMs?fmtDuration(dd.durationMs):"";
-    return`<div class="hist-card" style="border-left-color:${wk.accent}"><div class="hist-header" onclick="togEx('h_${key}')"><div><div class="hist-day-name">${wk.emoji} ${wk.name}</div><div class="hist-meta">${date} &mdash; ${vol}kg${dur?" &mdash; &#x23F1; "+dur:""}</div></div><div style="font-size:20px;color:#9a9690">${isO?"&minus;":"+"}</div></div>${body}</div>`;
+    return`<div class="hist-card" style="border-left-color:${wk.accent}"><div class="hist-header" onclick="togEx('h_${key}')"><div><div class="hist-day-name">${wk.emoji} ${wk.name}</div><div class="hist-meta">${(()=>{const parts=key.split("_");const suffix=parts.length>2?" <strong style=\"color:#c8960a\">#"+parts[2]+"</strong>":"";return parts[1]+suffix;})()}&mdash; ${vol}kg${dur?" &mdash; &#x23F1; "+dur:""}</div></div><div style="font-size:20px;color:#9a9690">${isO?"&minus;":"+"}</div></div>${body}</div>`;
   }).join("");
   return`<div class="history-wrap"><div class="section-title">Workout History</div>${cards}</div>`;
 }
@@ -851,16 +852,22 @@ function rStats(){
       <div class="stats-field"><div class="stats-label">Waist (${mLbl()})</div><input class="stats-input" id="inp-waist" type="number" inputmode="decimal" placeholder="${mLbl()}" /></div>
       <button class="btn-log-stats" onclick="logStats()">Log</button>
     </div>
+    <div style="font-size:11px;color:#9a9690;line-height:1.6;margin-top:4px">
+      Height &amp; neck snapshotted from your profile (${hCm?cmToM(hCm)+mLbl():"not set"} / ${nCm?cmToM(nCm)+mLbl():"not set"}).
+      Update profile above if they&rsquo;ve changed before logging.
+    </div>
   </div>`;
 
   /* RESULTS */
   let resultsHtml="";
   if(latest&&hCm&&nCm){
-    const bf=navyBF(latest.waistCm,nCm,hCm);
+    // Use snapshotted values from entry — falls back to current profile if old entry predates fix
+    const entryNeck=latest.neckCm||nCm,entryHt=latest.heightCm||hCm;
+    const bf=navyBF(latest.waistCm,entryNeck,entryHt);
     const wKg=latest.weightKg;
     const fatKg=bf?parseFloat((wKg*bf/100).toFixed(1)):null;
     const leanKg=fatKg?parseFloat((wKg-fatKg).toFixed(1)):null;
-    const kino=hCm?{ideal:kinoIdeal(hCm),excessCm:Math.max(0,latest.waistCm-kinoIdeal(hCm))}:null;
+    const kino=entryHt?{ideal:kinoIdeal(entryHt),excessCm:Math.max(0,latest.waistCm-kinoIdeal(entryHt))}:null;
     const exIn=kino?(kino.excessCm/2.54):0;
     const fatToLose=kino?parseFloat((exIn*5*0.453592).toFixed(1)):0; // in kg
     let bfCls="go";if(bf>25)bfCls="ba";else if(bf>20)bfCls="wa";else if(bf>15)bfCls="hi";
@@ -877,10 +884,10 @@ function rStats(){
       </div>
       ${kino?`<div class="kino-bar-wrap">
         <div class="stats-card-title" style="margin-top:6px;margin-bottom:8px">&#x1F4D0; Kinobody Waist Ratio</div>
-        <div class="kino-bar-labels"><span>Current: ${(latest.waistCm/hCm*100).toFixed(1)}% of height</span><span style="color:#2a7a3a">&#x2193; Ideal: 44.7%</span></div>
+        <div class="kino-bar-labels"><span>Current: ${(latest.waistCm/entryHt*100).toFixed(1)}% of height</span><span style="color:#2a7a3a">&#x2193; Ideal: 44.7%</span></div>
         <div style="display:flex;justify-content:space-between;font-size:9px;color:#bbb;margin-bottom:3px"><span>35%</span><span>45%</span><span>55%</span></div>
         <div class="kino-bar-track">
-          <div class="kino-bar-fill" style="width:${Math.min(100,Math.max(0,((latest.waistCm/hCm*100-35)/20)*100)).toFixed(1)}%;background:${ratioColor}"></div>
+          <div class="kino-bar-fill" style="width:${Math.min(100,Math.max(0,((latest.waistCm/entryHt*100-35)/20)*100)).toFixed(1)}%;background:${ratioColor}"></div>
           <div class="kino-marker" style="left:${(((44.7-35)/20)*100).toFixed(1)}%"></div>
         </div>
         <div class="kino-status" style="color:${ratioColor}">${ratioMsg}</div>
@@ -898,7 +905,8 @@ function rStats(){
     </div>
     ${(()=>{
       if(!latest)return`<div style="font-size:13px;color:#9a9690;text-align:center;padding:12px">Log a check-in to see your targets.</div>`;
-      const bf=hCm&&nCm?navyBF(latest.waistCm,nCm,hCm):null;
+      const eNeck=latest.neckCm||nCm,eHt=latest.heightCm||hCm;
+      const bf=eHt&&eNeck?navyBF(latest.waistCm,eNeck,eHt):null;
       if(!bf)return`<div style="font-size:13px;color:#9a9690;text-align:center;padding:12px">Save your profile (height + neck) to enable macro targets.</div>`;
       const m=calcMacros(latest.weightKg,bf,S.profile.phase);
       if(!m)return"";
@@ -926,8 +934,8 @@ function rStats(){
   // Graph 1: Recomp — only if body stats logged with profile
   if(stats.length>1&&hCm&&nCm){
     const pts=stats.slice(-12);
-    const leans=pts.map(s=>{const bf=navyBF(s.waistCm,nCm,hCm);return bf?parseFloat((s.weightKg*(1-bf/100)).toFixed(1)):null;});
-    const fats=pts.map(s=>{const bf=navyBF(s.waistCm,nCm,hCm);return bf?parseFloat((s.weightKg*bf/100).toFixed(1)):null;});
+    const leans=pts.map(s=>{const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;const bf=navyBF(s.waistCm,sNeck,sHt);return bf?parseFloat((s.weightKg*(1-bf/100)).toFixed(1)):null;});
+    const fats=pts.map(s=>{const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;const bf=navyBF(s.waistCm,sNeck,sHt);return bf?parseFloat((s.weightKg*bf/100).toFixed(1)):null;});
     const allR=[...leans,...fats].filter(Boolean);
     if(allR.length>0){
       const mn=Math.min(...allR)-2,mx=Math.max(...allR)+2;
@@ -1035,7 +1043,7 @@ function rStats(){
         tonnageVals.forEach((v,i)=>{
           const x=ppx+i/(tonnageVals.length-1||1)*(WW-ppx*2);
           const y=HH-ppy*2-((v/maxTon)*(HH-ppy*3));
-          tonSvg+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${colors[activeFilter]}" onclick="showTonnageTip('${tonnageDates[i]||""}',${v})" style="cursor:pointer"/>`;
+          tonSvg+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${colors[activeFilter]}" onclick="showTonnageTip('${tonnageDates[i]||""}',${v})" ontouchstart="showTonnageTip('${tonnageDates[i]||""}',${v})" style="cursor:pointer"/>`;
           // Date label below x-axis (show first and last only on mobile)
           if(i===0||i===tonnageVals.length-1||tonnageVals.length<=4){
             const lbl=(tonnageDates[i]||"").slice(5); // MM-DD
@@ -1044,7 +1052,7 @@ function rStats(){
         });
       }else if(tonnageVals.length===1){
         const x=WW/2,y=HH/2;
-        tonSvg+=`<circle cx="${x}" cy="${y}" r="4" fill="${colors[activeFilter]}" onclick="showTonnageTip('${tonnageDates[0]||""}',${tonnageVals[0]})" style="cursor:pointer"/>`;
+        tonSvg+=`<circle cx="${x}" cy="${y}" r="4" fill="${colors[activeFilter]}" onclick="showTonnageTip('${tonnageDates[0]||""}',${tonnageVals[0]})" ontouchstart="showTonnageTip('${tonnageDates[0]||""}',${tonnageVals[0]})" style="cursor:pointer"/>`;
       }
       tonSvg+=`</svg>`;
       // Workout filter buttons
@@ -1063,7 +1071,8 @@ function rStats(){
   let logHtml="";
   if(stats.length){
     const rows=[...stats].reverse().slice(0,10).map((s,i)=>{
-      const bf=hCm&&nCm?navyBF(s.waistCm,nCm,hCm):null;
+      const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;
+      const bf=sHt&&sNeck?navyBF(s.waistCm,sNeck,sHt):null;
       const ri=stats.length-1-i;
       return`<div class="stats-log-row"><span class="stats-log-date">${s.date}</span><div class="stats-log-vals"><span class="stats-log-val">${kgToW(s.weightKg)}${wLbl()}</span><span class="stats-log-val">${cmToM(s.waistCm).toString().slice(0,4)}${mLbl()}</span>${bf?`<span class="stats-log-bf">${bf}% BF</span>`:""}</div><button class="btn-del-stat" onclick="delStat(${ri})">&times;</button></div>`;
     }).join("");
@@ -1294,7 +1303,15 @@ window.logStats=async()=>{
   if(!wEl||!waistEl)return;
   const wv=parseFloat(wEl.value),waistV=parseFloat(waistEl.value);
   if(!wv||!waistV){showToast("Enter weight and waist");return;}
-  const entry={date:new Date().toISOString().slice(0,10),weightKg:wToKg(wv),waistCm:mToCm(waistV)};
+  if(!S.profile.heightCm||!S.profile.neckCm){showToast("Save your height & neck in profile first");return;}
+  // Snapshot height and neck at time of logging — protects historical BF% accuracy
+  const entry={
+    date:new Date().toISOString().slice(0,10),
+    weightKg:wToKg(wv),
+    waistCm:mToCm(waistV),
+    heightCm:S.profile.heightCm,  // snapshotted at log time
+    neckCm:S.profile.neckCm       // snapshotted at log time
+  };
   if(!S.profile.stats)S.profile.stats=[];
   const idx=S.profile.stats.findIndex(s=>s.date===entry.date);
   if(idx>=0)S.profile.stats[idx]=entry;else S.profile.stats.push(entry);
