@@ -301,6 +301,16 @@ button{cursor:pointer;font-family:inherit}
 <div id="app"></div>
 
 <script type="module">
+// Global error safety net - prevents infinite loading screen
+window.addEventListener("error",()=>{
+  const l=document.getElementById("loading");
+  if(l&&l.style.display!=="none"){
+    l.style.display="none";
+    const ls=document.getElementById("login-screen");
+    if(ls)ls.style.display="flex";
+  }
+});
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -322,7 +332,7 @@ window.doSignOut=async()=>{await fbSignOut(auth);S.log={};S.profile={stats:[]};d
 window.toggleMenu=()=>{document.getElementById("user-menu").classList.toggle("open");};
 document.addEventListener("click",e=>{const m=document.getElementById("user-menu");if(m&&!m.contains(e.target)&&!e.target.closest("[onclick*=toggleMenu]"))m.classList.remove("open");});
 onAuthStateChanged(auth,async user=>{
-  document.getElementById("loading").style.display="none";
+  try{document.getElementById("loading").style.display="none";}catch(e){}
   if(user){
     currentUser=user;
     document.getElementById("login-screen").style.display="none";
@@ -1494,7 +1504,7 @@ window.generateWeeklyReport=()=>{
         <div style="font-size:18px;font-weight:700;font-family:Georgia,serif">${kino?kino.ratio:"-"}% <span style="font-size:13px;color:#9a9690">of height (ideal: 44.7%)</span></div>
         <div style="font-size:12px;color:#9a9690;margin-top:2px">Waist: ${cmToM(latest.waistCm)}${mLbl()} &bull; Ideal: ${hCm?cmToM(kinoIdeal(hCm)).toString().slice(0,4):"—"}${mLbl()}</div>
       </div>
-      ${kino?`<div style="font-size:13px;font-weight:700;color:${parseFloat(kino.excessIn)<=0?"#2a7a3a":parseFloat(kino.excessIn)<2?"#c8960a":"#c03030"}">${parseFloat(kino.excessIn)<=0?"✅ At ideal":"🔥 "+kino.excessIn+'" above ideal"}</div>`:""}
+      ${kino?(()=>{const ei=parseFloat(kino.excessIn);const col=ei<=0?"#2a7a3a":ei<2?"#c8960a":"#c03030";const msg=ei<=0?"At ideal waist":ei.toFixed(1)+String.fromCharCode(34)+" above ideal";return`<div style="font-size:13px;font-weight:700;color:${col}">${ei<=0?"✅":"🔥"} ${msg}</div>`;})():""}
     </div>
   </div>`:""}
 </div>
@@ -1524,7 +1534,7 @@ window.generateWeeklyReport=()=>{
   <div class="section-title">&#x1F3CB; Strength Anchors (Last Session Top Set)</div>
   ${benchTop?`<div class="lift-row">
     <div><div style="font-size:13px;font-weight:700">DB Bench Press &mdash; Set 1</div><div style="font-size:11px;color:#9a9690">${benchTop.date}</div></div>
-    <div style="text-align:right"><div style="font-size:16px;font-weight:700;color:#c8960a">${benchTop.kg}kg &times; ${benchTop.reps} reps</div><div style="font-size:11px;color:#9a9690">Est. 1RM: ${benchTop.kg&&benchTop.reps?parseFloat((parseFloat(benchTop.kg)+parseFloat(benchTop.kg)*parseFloat(benchTop.reps)*0.0333).toFixed(1)):"—"}kg</div></div>
+    <div style="text-align:right"><div style="font-size:16px;font-weight:700;color:#c8960a">${benchTop.kg}kg x ${benchTop.reps} reps</div><div style="font-size:11px;color:#9a9690">Est. 1RM: ${benchTop.kg&&benchTop.reps?parseFloat((parseFloat(benchTop.kg)+parseFloat(benchTop.kg)*parseFloat(benchTop.reps)*0.0333).toFixed(1)):"n/a"}kg</div></div>
   </div>`:`<div class="lift-row"><div style="font-size:13px;color:#9a9690;font-style:italic">No Workout A sessions yet</div></div>`}
   ${pullupTop?`<div class="lift-row">
     <div><div style="font-size:13px;font-weight:700">Weighted Pull-Ups &mdash; Set 1</div><div style="font-size:11px;color:#9a9690">${pullupTop.date}</div></div>
