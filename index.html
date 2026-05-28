@@ -298,6 +298,11 @@ button{cursor:pointer;font-family:inherit}
   <button class="user-menu-so" onclick="doSignOut()">Sign out</button>
 </div>
 <div id="toast"></div>
+<div id="chart-tooltip" style="position:fixed;display:none;background:#1a1814;color:#fff;border-radius:8px;padding:8px 14px;font-size:12px;font-family:Courier New,monospace;pointer-events:none;z-index:9998;box-shadow:0 4px 16px rgba(0,0,0,.3);min-width:140px;max-width:220px">
+  <div id="chart-tooltip-label" style="font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px;opacity:.7"></div>
+  <div id="chart-tooltip-value" style="font-size:15px;font-weight:700"></div>
+  <div id="chart-tooltip-series" style="font-size:10px;opacity:.6;margin-top:2px"></div>
+</div>
 <div id="app"></div>
 
 <script type="module">
@@ -1004,10 +1009,11 @@ function rStats(){
       s.values.forEach((v,i)=>{
         if(v==null)return;
         const x=xPos(i).toFixed(1),y=yPos(v).toFixed(1);
-        const tipText=`${labels[i]||""}: ${v.toFixed(1)}${yUnit} (${s.label})`;
-        seriesSvg+=`<circle cx="${x}" cy="${y}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"
-          onclick="showChartTip('${cardId}','${tipText}')"
-          ontouchstart="showChartTip('${cardId}','${tipText}')"
+        const tipText=`${labels[i]||""}: ${v.toFixed(1)}${yUnit}`;
+        const tipLabel=`${s.label}`;
+        seriesSvg+=`<circle cx="${x}" cy="${y}" r="5" fill="${s.color}" stroke="#fff" stroke-width="2"
+          onclick="showChartTip(event,'${cardId}','${tipText}','${tipLabel}','${s.color}')"
+          ontouchstart="showChartTip(event,'${cardId}','${tipText}','${tipLabel}','${s.color}')"
           style="cursor:pointer"/>`;
       });
     });
@@ -1017,7 +1023,7 @@ function rStats(){
 
     return`<div class="stats-card" id="card_${cardId}">
       <div class="stats-card-title">${title}</div>
-      <div id="tip_${cardId}" style="display:none;font-size:12px;font-weight:700;color:#1a1814;background:#fef9e8;border:1px solid #e8c870;border-radius:6px;padding:5px 12px;margin-bottom:8px;text-align:center"></div>
+
       <div class="chart-wrap" style="overflow-x:auto">
         <svg viewBox="0 0 ${CW} ${CH}" width="100%" style="min-width:260px;max-width:100%;display:block">
           ${gridLines}${axes}${seriesSvg}${yAxisLabels}${xAxisLabels}
@@ -1030,8 +1036,9 @@ function rStats(){
   // Graph 1: Recomp — split into two charts so each has its own Y scale
   if(stats.length>1&&hCm&&nCm){
     const pts=stats.slice(-12);
-    const leans=pts.map(s=>{const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;const bf=navyBF(s.waistCm,sNeck,sHt);return bf?parseFloat((s.weightKg*(1-bf/100)).toFixed(1)):null;});
-    const fats=pts.map(s=>{const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;const bf=navyBF(s.waistCm,sNeck,sHt);return bf?parseFloat((s.weightKg*bf/100).toFixed(1)):null;});
+    // Calculate in kg first, then convert to display unit for charting
+    const leans=pts.map(s=>{const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;const bf=navyBF(s.waistCm,sNeck,sHt);return bf?parseFloat(kgToW(s.weightKg*(1-bf/100))):null;});
+    const fats=pts.map(s=>{const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;const bf=navyBF(s.waistCm,sNeck,sHt);return bf?parseFloat(kgToW(s.weightKg*bf/100)):null;});
     const weights=pts.map(s=>parseFloat(kgToW(s.weightKg)));
     const waists=pts.map(s=>parseFloat(cmToM(s.waistCm)));
     const lbls=pts.map(s=>s.date);
@@ -1415,15 +1422,39 @@ window.logStats=async()=>{
 };
 
 window.setTonnageFilter=id=>{S.tonnageFilter=id;render();};
-window.showTonnageTip=(date,vol)=>{showChartTip("tonnage",`${date}: ${vol}kg total volume`);};
-window.showChartTip=(cardId,msg)=>{
-  const el=document.getElementById("tip_"+cardId);
-  if(!el)return;
-  el.textContent=msg;
-  el.style.display="block";
-  clearTimeout(el._t);
-  el._t=setTimeout(()=>{el.style.display="none";},3000);
+window.showTonnageTip=(date,vol)=>{};
+window.showChartTip=(evt,cardId,text,seriesLabel,color)=>{
+  const tip=document.getElementById("chart-tooltip");
+  if(!tip)return;
+  // Parse date and value from text e.g. "2026-05-27: 127.0lbs"
+  const parts=text.split(": ");
+  const date=parts[0]||"";
+  const val=parts[1]||text;
+  document.getElementById("chart-tooltip-label").textContent=date;
+  document.getElementById("chart-tooltip-value").textContent=val;
+  document.getElementById("chart-tooltip-value").style.color=color||"#c8960a";
+  document.getElementById("chart-tooltip-series").textContent=seriesLabel||"";
+  tip.style.display="block";
+  // Position near click/touch
+  const e=evt.touches?evt.touches[0]:evt;
+  const x=e.clientX||0, y=e.clientY||0;
+  const tw=tip.offsetWidth||180, th=tip.offsetHeight||60;
+  const vw=window.innerWidth, vh=window.innerHeight;
+  let left=x+12, top=y-th-12;
+  if(left+tw>vw-8)left=x-tw-12;
+  if(top<8)top=y+12;
+  tip.style.left=left+"px";
+  tip.style.top=top+"px";
+  clearTimeout(tip._t);
+  tip._t=setTimeout(()=>{tip.style.display="none";},3000);
 };
+// Hide tooltip on scroll or tap elsewhere
+document.addEventListener("touchstart",e=>{
+  if(!e.target.closest("circle"))document.getElementById("chart-tooltip").style.display="none";
+},{passive:true});
+document.addEventListener("click",e=>{
+  if(!e.target.closest("circle"))document.getElementById("chart-tooltip").style.display="none";
+});
 window.delStat=async idx=>{
   S.profile.stats.splice(idx,1);
   await fbSaveProfile(S.profile);showToast("Entry deleted");render();
