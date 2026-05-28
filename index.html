@@ -936,14 +936,95 @@ function rStats(){
     })()}
   </div>`;
 
-  /* CHARTS — independent of body stats */
+  /* ═══════════════════════════════════════════
+     PROPER CHARTS — axes, grid, tooltips
+     ═══════════════════════════════════════════ */
   let chartsHtml="";
-  const W=320,H=110,px=10,py=8;
-  function svgLine(vals,mn,mx,color,dash){
-    if(!vals||!vals.some(v=>v!==null&&v!==undefined))return"";
-    const pts2=vals.map((v,i)=>{if(v===null||v===undefined)return null;const x=px+i/(vals.length-1||1)*(W-px*2);const y=H-py-((v-mn)/(mx-mn||1))*(H-py*2);return`${x.toFixed(1)},${y.toFixed(1)}`;}).filter(Boolean).join(" ");
-    if(!pts2)return"";
-    return`<polyline points="${pts2}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"${dash?` stroke-dasharray="${dash}"`:""}/>`+vals.map((v,i)=>{if(v===null||v===undefined)return"";const x=px+i/(vals.length-1||1)*(W-px*2);const y=H-py-((v-mn)/(mx-mn||1))*(H-py*2);return`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}"/>`;}).join("");
+
+  // Chart builder function — returns full HTML string for a chart card
+  function buildChart({title, series, labels, yUnit="", colorScheme=[], dashed=[], cardId=""}){
+    // series = [{values:[...], label:"", color:"#xxx"}]
+    // labels = date strings for x-axis
+    const n=labels.length;
+    if(n===0)return"";
+
+    const CW=320, CH=160;
+    const padL=52, padR=12, padT=12, padB=32;
+    const plotW=CW-padL-padR, plotH=CH-padT-padB;
+
+    // Flatten all values to get y scale
+    const allVals=series.flatMap(s=>s.values).filter(v=>v!=null&&!isNaN(v));
+    if(!allVals.length)return"";
+    const rawMin=Math.min(...allVals), rawMax=Math.max(...allVals);
+    const range=rawMax-rawMin||1;
+    const yMin=parseFloat((rawMin-range*0.15).toFixed(1));
+    const yMax=parseFloat((rawMax+range*0.15).toFixed(1));
+    const yRange=yMax-yMin;
+
+    function xPos(i){return padL+i/(n-1||1)*plotW;}
+    function yPos(v){return padT+plotH-(((v-yMin)/yRange)*plotH);}
+
+    // Y axis ticks — 4 ticks
+    const yTicks=4;
+    let gridLines="",yAxisLabels="";
+    for(let t=0;t<=yTicks;t++){
+      const v=yMin+(t/yTicks)*yRange;
+      const y=yPos(v);
+      gridLines+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${CW-padR}" y2="${y.toFixed(1)}" stroke="#e8e4dc" stroke-width="1"/>`;
+      yAxisLabels+=`<text x="${padL-4}" y="${(y+4).toFixed(1)}" text-anchor="end" style="font-size:9px;fill:#9a9690;font-family:Courier New">${v.toFixed(1)}${yUnit}</text>`;
+    }
+
+    // X axis labels — show first, middle, last
+    let xAxisLabels="";
+    const xIdxs=[0, Math.floor((n-1)/2), n-1].filter((v,i,a)=>a.indexOf(v)===i);
+    xIdxs.forEach(i=>{
+      const lbl=(labels[i]||"").slice(5); // MM-DD
+      const x=xPos(i);
+      xAxisLabels+=`<text x="${x.toFixed(1)}" y="${CH-6}" text-anchor="middle" style="font-size:9px;fill:#9a9690;font-family:Courier New">${lbl}</text>`;
+    });
+
+    // Draw axes
+    const axes=`<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+plotH}" stroke="#ddd9d0" stroke-width="1.5"/>
+    <line x1="${padL}" y1="${padT+plotH}" x2="${CW-padR}" y2="${padT+plotH}" stroke="#ddd9d0" stroke-width="1.5"/>`;
+
+    // Draw series
+    let seriesSvg="";
+    series.forEach((s,si)=>{
+      if(!s.values.some(v=>v!=null))return;
+      const dash=dashed[si]?"6,4":"";
+      // Line
+      let pathD="";
+      s.values.forEach((v,i)=>{
+        if(v==null)return;
+        const x=xPos(i).toFixed(1),y=yPos(v).toFixed(1);
+        pathD+=pathD?"L"+x+","+y:"M"+x+","+y;
+      });
+      if(pathD)seriesSvg+=`<path d="${pathD}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"${dash?` stroke-dasharray="${dash}"`:""} stroke-linecap="round"/>`;
+      // Dots with tooltip data
+      s.values.forEach((v,i)=>{
+        if(v==null)return;
+        const x=xPos(i).toFixed(1),y=yPos(v).toFixed(1);
+        const tipText=`${labels[i]||""}: ${v.toFixed(1)}${yUnit} (${s.label})`;
+        seriesSvg+=`<circle cx="${x}" cy="${y}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"
+          onclick="showChartTip('${cardId}','${tipText}')"
+          ontouchstart="showChartTip('${cardId}','${tipText}')"
+          style="cursor:pointer"/>`;
+      });
+    });
+
+    // Legend
+    const legendHtml=series.map((s,si)=>`<div class="legend-item"><div class="legend-dot" style="background:${s.color};${dashed[si]?"border:2px dashed "+s.color+";background:transparent;width:14px;height:6px;border-radius:0":""}"></div>${s.label}</div>`).join("");
+
+    return`<div class="stats-card" id="card_${cardId}">
+      <div class="stats-card-title">${title}</div>
+      <div id="tip_${cardId}" style="display:none;font-size:12px;font-weight:700;color:#1a1814;background:#fef9e8;border:1px solid #e8c870;border-radius:6px;padding:5px 12px;margin-bottom:8px;text-align:center"></div>
+      <div class="chart-wrap" style="overflow-x:auto">
+        <svg viewBox="0 0 ${CW} ${CH}" width="100%" style="min-width:260px;max-width:100%;display:block">
+          ${gridLines}${axes}${seriesSvg}${yAxisLabels}${xAxisLabels}
+        </svg>
+      </div>
+      <div class="chart-legend" style="margin-top:8px">${legendHtml}</div>
+    </div>`;
   }
 
   // Graph 1: Recomp — only if body stats logged with profile
@@ -951,10 +1032,17 @@ function rStats(){
     const pts=stats.slice(-12);
     const leans=pts.map(s=>{const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;const bf=navyBF(s.waistCm,sNeck,sHt);return bf?parseFloat((s.weightKg*(1-bf/100)).toFixed(1)):null;});
     const fats=pts.map(s=>{const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;const bf=navyBF(s.waistCm,sNeck,sHt);return bf?parseFloat((s.weightKg*bf/100).toFixed(1)):null;});
+    const lbls=pts.map(s=>s.date);
     const allR=[...leans,...fats].filter(Boolean);
-    if(allR.length>0){
-      const mn=Math.min(...allR)-2,mx=Math.max(...allR)+2;
-      chartsHtml+=`<div class="stats-card"><div class="stats-card-title">&#x1F4C8; Recomposition Trend</div><div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="100%">${svgLine(leans,mn,mx,"#2a7a3a","")}${svgLine(fats,mn,mx,"#c03030","4,3")}</svg></div><div class="chart-legend"><div class="legend-item"><div class="legend-dot" style="background:#2a7a3a"></div>Lean Mass (${wLbl()})</div><div class="legend-item"><div class="legend-dot" style="background:#c03030"></div>Fat Mass (${wLbl()})</div></div></div>`;
+    if(allR.length>1){
+      chartsHtml+=buildChart({
+        title:"&#x1F4C8; Recomposition Trend",
+        series:[
+          {values:leans,label:"Lean Mass ("+wLbl()+")",color:"#2a7a3a"},
+          {values:fats,label:"Fat Mass ("+wLbl()+")",color:"#c03030"}
+        ],
+        labels:lbls, yUnit:wLbl(), dashed:[false,true], cardId:"recomp"
+      });
     }
   }
 
@@ -986,35 +1074,26 @@ function rStats(){
     });
     if(strengthPts.filter(Boolean).length>=2){
       const sessionLabels=finishedSessions.map(([k])=>k.split("_")[1]);
-      const allS=[...strengthPts,...bodyweightPts].filter(Boolean);
-      const mn2=Math.min(...allS)-2,mx2=Math.max(...allS)+2;
-      chartsHtml+=`<div class="stats-card">
-        <div class="stats-card-title">&#x1F4AA; Strength Progress (Est. 1RM)</div>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-          ${["A1","B1"].map(id=>{
-            const wk2=WORKOUTS.find(w=>w.id===id[0]);
-            const ex2=wk2?.exercises.find(ex=>ex.id===id);
-            if(!ex2)return"";
-            const active=S.strengthAnchor===id;
-            return`<button style="padding:6px 12px;font-size:11px;font-weight:700;border:1.5px solid ${active?"#c8960a":"#ddd9d0"};border-radius:7px;background:${active?"#fef9e8":"#f5f4f0"};color:${active?"#8a6a00":"#5a5650"};cursor:pointer" onclick="setAnchor('${id}')">${ex2.name}</button>`;
-          }).join("")}
-        </div>
-        <div class="chart-wrap">
-          <svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="100%">
-            ${svgLine(strengthPts,mn2,mx2,"#c8960a","")}
-            ${bodyweightPts.some(Boolean)?svgLine(bodyweightPts,mn2,mx2,"#9a9690","4,3"):""}
-          </svg>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px;flex-wrap:wrap;gap:4px">
-          <div style="font-size:11px;color:#9a9690">${sessionLabels[0]||""}</div>
-          <div style="font-size:11px;color:#9a9690">${sessionLabels[sessionLabels.length-1]||""}</div>
-        </div>
-        <div class="chart-legend">
-          <div class="legend-item"><div class="legend-dot" style="background:#c8960a"></div>Est. 1RM (kg)</div>
-          ${bodyweightPts.some(Boolean)?`<div class="legend-item"><div class="legend-dot" style="background:#9a9690"></div>Bodyweight (${wLbl()})</div>`:""}
-        </div>
-        ${strengthPts.filter(Boolean).length<3?`<div style="font-size:11px;color:#9a9690;margin-top:8px;font-style:italic">Keep logging &mdash; trend line builds after 3+ sessions.</div>`:""}
-      </div>`;
+      const anchorBtns=["A1","B1"].map(id=>{
+        const wk2=WORKOUTS.find(w=>w.id===id[0]);
+        const ex2=wk2?.exercises.find(ex=>ex.id===id);
+        if(!ex2)return"";
+        const active=S.strengthAnchor===id;
+        return`<button style="padding:6px 12px;font-size:11px;font-weight:700;border:1.5px solid ${active?"#c8960a":"#ddd9d0"};border-radius:7px;background:${active?"#fef9e8":"#f5f4f0"};color:${active?"#8a6a00":"#5a5650"};cursor:pointer;margin-bottom:10px" onclick="setAnchor('${id}')">${ex2.name}</button>`;
+      }).join("");
+      const strengthSeries=[{values:strengthPts,label:"Est. 1RM (kg)",color:"#c8960a"}];
+      if(bodyweightPts.some(Boolean))strengthSeries.push({values:bodyweightPts,label:"Bodyweight ("+wLbl()+")",color:"#9a9690"});
+      const strengthChart=buildChart({
+        title:"&#x1F4AA; Strength Progress (Est. 1RM)",
+        series:strengthSeries,
+        labels:sessionLabels, yUnit:"kg", dashed:[false,true], cardId:"strength"
+      });
+      // Insert anchor buttons after title
+      chartsHtml+=strengthChart.replace(
+        '<div class="chart-wrap"',
+        `<div style="display:flex;gap:8px;flex-wrap:wrap">${anchorBtns}</div><div class="chart-wrap"`
+      );
+      if(strengthPts.filter(Boolean).length<3)chartsHtml+=`<div style="font-size:11px;color:#9a9690;margin-top:-8px;margin-bottom:10px;padding:0 16px;font-style:italic">Keep logging &mdash; trend builds after 3+ sessions.</div>`;
     } else if(strengthPts.filter(Boolean).length===1){
       chartsHtml+=`<div class="stats-card"><div class="stats-card-title">&#x1F4AA; Strength Progress (Est. 1RM)</div>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
@@ -1046,39 +1125,24 @@ function rStats(){
     const tonnageDates=filtSessions.map(([k])=>k.split("_")[1]);
     const anySession=Object.values(S.log).some(d=>d.finished);
     if(anySession){
-      const WW=320,HH=120,ppx=12,ppy=10;
-      const maxTon=tonnageVals.length?Math.max(...tonnageVals)+200:1000;
-      // Build SVG with clickable dots and date x-axis
-      let tonSvg=`<svg class="chart-svg" viewBox="0 0 ${WW} ${HH}" width="100%">`;
-      if(tonnageVals.length>=2){
-        // Line
-        const pts2=tonnageVals.map((v,i)=>{const x=ppx+i/(tonnageVals.length-1||1)*(WW-ppx*2);const y=HH-ppy*2-((v/maxTon)*(HH-ppy*3));return`${x.toFixed(1)},${y.toFixed(1)}`;}).join(" ");
-        tonSvg+=`<polyline points="${pts2}" fill="none" stroke="${colors[activeFilter]}" stroke-width="2" stroke-linejoin="round"/>`;
-        // Dots with tooltips
-        tonnageVals.forEach((v,i)=>{
-          const x=ppx+i/(tonnageVals.length-1||1)*(WW-ppx*2);
-          const y=HH-ppy*2-((v/maxTon)*(HH-ppy*3));
-          tonSvg+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${colors[activeFilter]}" onclick="showTonnageTip('${tonnageDates[i]||""}',${v})" ontouchstart="showTonnageTip('${tonnageDates[i]||""}',${v})" style="cursor:pointer"/>`;
-          // Date label below x-axis (show first and last only on mobile)
-          if(i===0||i===tonnageVals.length-1||tonnageVals.length<=4){
-            const lbl=(tonnageDates[i]||"").slice(5); // MM-DD
-            tonSvg+=`<text x="${x.toFixed(1)}" y="${(HH-2).toFixed(1)}" text-anchor="middle" style="font-size:8px;fill:#9a9690">${lbl}</text>`;
-          }
-        });
-      }else if(tonnageVals.length===1){
-        const x=WW/2,y=HH/2;
-        tonSvg+=`<circle cx="${x}" cy="${y}" r="4" fill="${colors[activeFilter]}" onclick="showTonnageTip('${tonnageDates[0]||""}',${tonnageVals[0]})" ontouchstart="showTonnageTip('${tonnageDates[0]||""}',${tonnageVals[0]})" style="cursor:pointer"/>`;
-      }
-      tonSvg+=`</svg>`;
       // Workout filter buttons
       const filterBtns=WORKOUTS.map(w=>`<button style="padding:5px 12px;font-size:11px;font-weight:700;border:1.5px solid ${activeFilter===w.id?colors[w.id]:"#ddd9d0"};border-radius:7px;background:${activeFilter===w.id?"#fef9e8":"#f5f4f0"};color:${activeFilter===w.id?colors[w.id]:"#5a5650"};cursor:pointer" onclick="setTonnageFilter('${w.id}')">${w.emoji} ${w.name}</button>`).join("");
-      chartsHtml+=`<div class="stats-card">
-        <div class="stats-card-title">&#x1F3CB; Session Tonnage (kg)</div>
-        <div id="tonnage-tip" style="display:none;font-size:12px;font-weight:700;color:#1a1814;background:#fef9e8;border:1px solid #e8c870;border-radius:6px;padding:5px 12px;margin-bottom:8px;text-align:center"></div>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">${filterBtns}</div>
-        <div class="chart-wrap">${tonSvg}</div>
-        ${tonnageVals.length===0?`<div style="font-size:13px;color:#9a9690;padding:12px 0;text-align:center;font-style:italic">No ${wkForTon.name} sessions yet.</div>`:""}
-      </div>`;
+      if(tonnageVals.length>=2){
+        const tonChart=buildChart({
+          title:"&#x1F3CB; Session Tonnage (kg)",
+          series:[{values:tonnageVals,label:wkForTon.name+" volume (kg)",color:colors[activeFilter]}],
+          labels:tonnageDates, yUnit:"kg", dashed:[false], cardId:"tonnage"
+        });
+        chartsHtml+=tonChart.replace(
+          '<div class="chart-wrap"',
+          `<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">${filterBtns}</div><div class="chart-wrap"`
+        );
+      } else {
+        chartsHtml+=`<div class="stats-card"><div class="stats-card-title">&#x1F3CB; Session Tonnage (kg)</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">${filterBtns}</div>
+          ${tonnageVals.length===0?`<div style="font-size:13px;color:#9a9690;padding:16px 0;text-align:center;font-style:italic">No ${wkForTon.name} sessions yet. Complete 2+ sessions to see the trend.</div>`:`<div style="font-size:13px;color:#9a9690;padding:12px 0;text-align:center;font-style:italic">1 session logged. Need 2+ to draw a trend line.</div>`}
+        </div>`;
+      }
     }
   }
 
@@ -1335,12 +1399,14 @@ window.logStats=async()=>{
 };
 
 window.setTonnageFilter=id=>{S.tonnageFilter=id;render();};
-window.showTonnageTip=(date,vol)=>{
-  const el=document.getElementById("tonnage-tip");
+window.showTonnageTip=(date,vol)=>{showChartTip("tonnage",`${date}: ${vol}kg total volume`);};
+window.showChartTip=(cardId,msg)=>{
+  const el=document.getElementById("tip_"+cardId);
   if(!el)return;
+  el.textContent=msg;
   el.style.display="block";
-  el.textContent=`${date}: ${vol}kg total volume`;
-  setTimeout(()=>{if(el)el.style.display="none";},3000);
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{el.style.display="none";},3000);
 };
 window.delStat=async idx=>{
   S.profile.stats.splice(idx,1);
