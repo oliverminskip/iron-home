@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="Iron Home"/>
 <meta name="theme-color" content="#f5f4f0"/>
@@ -140,11 +140,20 @@ button{cursor:pointer;font-family:inherit}
 .set-target strong{color:#1a1814}
 .set-rest-lbl{font-size:11px;color:#9a9690;margin-left:auto}
 .set-inputs{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.set-input{width:72px;background:#f8f6f2;border:1.5px solid #d0ccc4;border-radius:7px;color:#1a1814;font-size:15px;padding:7px 10px;font-family:inherit;outline:none;font-weight:600}
+.set-input{width:72px;background:#f8f6f2;border:1.5px solid #d0ccc4;border-radius:7px;color:#1a1814;font-size:16px;padding:8px 10px;font-family:inherit;outline:none;font-weight:600;min-height:38px}
 .set-input.filled{border-color:#2a7a3a}
 .prev-tag{font-size:11px;color:#1a5fa8;background:#eaf2fb;border:1px solid #b0d4f0;border-radius:4px;padding:2px 8px;white-space:nowrap;font-weight:600}
 /* REST TIMER BUTTON */
 .btn-rest{padding:5px 12px;background:#f5f4f0;border:1.5px solid #ddd9d0;border-radius:7px;font-size:11px;font-weight:700;color:#5a5650;letter-spacing:.5px;white-space:nowrap;transition:all .15s}
+.set-check{width:36px;height:36px;border-radius:50%;border:2px solid #d0ccc4;background:transparent;color:transparent;font-family:inherit;font-size:0;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;padding:0;line-height:1}
+.set-check:hover{border-color:#c8960a;background:#fef9e8}
+.set-check.checked{border-color:#2a7a3a;background:#2a7a3a;color:#fff;font-size:18px;font-weight:700}
+.set-check.checked::after{content:"\2713"}
+.set-check.timing{border-color:#c8960a;background:#fef9e8;color:#8a6a00;font-size:11px;font-weight:700}
+.set-row.checked-set{background:#f0faf2;border-left:3px solid #2a7a3a;padding-left:13px}
+.set-row.checked-set .set-input{border-color:#a0d0a8;background:#fff}
+.set-row.checked-set .set-input.filled{border-color:#2a7a3a}
+.drop-set-row.checked-set{background:#fff5f5}
 .btn-rest.running{background:#edf7ef;border-color:#2a7a3a;color:#2a7a3a}
 .btn-rest.done{background:#fff8ec;border-color:#c8960a;color:#c8960a;animation:pulse .6s ease 3}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
@@ -163,6 +172,12 @@ button{cursor:pointer;font-family:inherit}
 .btn-confirm{flex:1;padding:12px;background:#c03030;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700}
 .btn-cancel{flex:1;padding:12px;background:none;border:1.5px solid #ddd9d0;border-radius:10px;color:#5a5650;font-size:14px}
 .confirm-row{display:flex;gap:8px}
+/* STICKY SESSION HEADER */
+.session-bar{position:sticky;top:0;background:#1a1814;color:#c8960a;padding:10px 16px;display:flex;justify-content:space-around;align-items:center;z-index:60;font-family:"Courier New",Courier,monospace;border-bottom:1px solid #c8960a;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.session-bar-item{display:flex;flex-direction:column;align-items:center;gap:2px}
+.session-bar-num{font-size:18px;font-weight:700;color:#fff;font-family:Georgia,serif}
+.session-bar-lbl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#9a9690}
+@media(min-width:860px){.session-bar{border-radius:0 0 12px 12px}}
 /* MODAL */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:999;padding:24px}
 .modal-box{background:#fff;border-radius:16px;padding:28px;max-width:360px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18)}
@@ -213,7 +228,7 @@ button{cursor:pointer;font-family:inherit}
 .stats-input-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}
 .stats-field{display:flex;flex-direction:column;gap:4px}
 .stats-label{font-size:11px;color:#9a9690;font-weight:600;letter-spacing:1px;text-transform:uppercase}
-.stats-input{width:110px;background:#f8f6f2;border:1.5px solid #d0ccc4;border-radius:7px;color:#1a1814;font-size:15px;padding:8px 10px;font-family:inherit;outline:none;font-weight:600}
+.stats-input{width:110px;background:#f8f6f2;border:1.5px solid #d0ccc4;border-radius:7px;color:#1a1814;font-size:16px;padding:9px 10px;font-family:inherit;outline:none;font-weight:600;min-height:40px}
 .stats-input:focus{border-color:#c8960a}
 .btn-log-stats{padding:10px 20px;background:#c8960a;border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;align-self:flex-end}
 /* Result tiles */
@@ -318,24 +333,73 @@ window.addEventListener("error",()=>{
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const app=initializeApp({apiKey:"AIzaSyDoaRigyOg4BcoK4jatcoFOqj3My7eaqI4",authDomain:"iron-home-1991.firebaseapp.com",projectId:"iron-home-1991",storageBucket:"iron-home-1991.firebasestorage.app",messagingSenderId:"628944758589",appId:"1:628944758589:web:811ab5c28eb193bdb00754"});
 const db=getFirestore(app),auth=getAuth(app),provider=new GoogleAuthProvider();
 let currentUser=null;
 
 /* ═══ FIREBASE ═══ */
-async function fbSave(sk,data){if(!currentUser)return;try{await setDoc(doc(db,"users",currentUser.uid,"sessions",sk),{data:JSON.stringify(data),updatedAt:Date.now()});}catch(e){console.error(e);}}
-async function fbDel(sk){if(!currentUser)return;try{await deleteDoc(doc(db,"users",currentUser.uid,"sessions",sk));}catch(e){console.error(e);}}
-async function fbLoad(){if(!currentUser)return{};try{const snap=await getDocs(collection(db,"users",currentUser.uid,"sessions"));const log={};snap.forEach(d=>{try{log[d.id]=JSON.parse(d.data().data);}catch{}});return log;}catch(e){return{};}}
+async function fbSave(sk,data){
+  // Always backup to localStorage first (instant, survives crash)
+  try{localStorage.setItem("ironhome_session_"+sk,JSON.stringify(data));}catch(e){}
+  if(!currentUser)return;
+  try{await setDoc(doc(db,"users",currentUser.uid,"sessions",sk),{data:JSON.stringify(data),updatedAt:Date.now()});}catch(e){console.error("Save failed (cached locally):",e);}
+}
+async function fbDel(sk){
+  try{localStorage.removeItem("ironhome_session_"+sk);}catch(e){}
+  if(!currentUser)return;
+  try{await deleteDoc(doc(db,"users",currentUser.uid,"sessions",sk));}catch(e){console.error(e);}
+}
+async function fbLoad(){
+  const log={};
+  // First load any localStorage backups (in case of network failure or unsynced data)
+  try{
+    Object.keys(localStorage).forEach(k=>{
+      if(k.startsWith("ironhome_session_")){
+        const sk=k.replace("ironhome_session_","");
+        try{log[sk]=JSON.parse(localStorage.getItem(k));}catch{}
+      }
+    });
+  }catch(e){}
+  if(!currentUser)return log;
+  try{
+    const snap=await getDocs(collection(db,"users",currentUser.uid,"sessions"));
+    snap.forEach(d=>{try{log[d.id]=JSON.parse(d.data().data);}catch{}});
+  }catch(e){console.warn("Firebase load failed, using local backup:",e);}
+  return log;
+}
 async function fbSaveProfile(data){if(!currentUser)return;try{await setDoc(doc(db,"users",currentUser.uid,"profile","main"),{data:JSON.stringify(data),updatedAt:Date.now()});}catch(e){console.error(e);}}
 async function fbLoadProfile(){if(!currentUser)return{};try{const snap=await getDoc(doc(db,"users",currentUser.uid,"profile","main"));if(snap.exists())return JSON.parse(snap.data().data);return{};}catch(e){return{};}}
 
 /* ═══ AUTH ═══ */
-window.signInGoogle=async()=>{try{await signInWithPopup(auth,provider);}catch(e){showToast("Sign-in failed — try again");}};
+window.signInGoogle=async()=>{
+  try{
+    // Mobile Safari blocks popups — use redirect on iOS, popup on desktop
+    const isMobileSafari=/iP(ad|hone|od)/.test(navigator.userAgent)&&/Safari/.test(navigator.userAgent);
+    if(isMobileSafari){
+      await signInWithRedirect(auth,provider);
+    }else{
+      await signInWithPopup(auth,provider);
+    }
+  }catch(e){
+    console.error("Sign-in error:",e);
+    showToast("Sign-in failed — try again");
+  }
+};
 window.doSignOut=async()=>{await fbSignOut(auth);S.log={};S.profile={stats:[]};document.getElementById("user-menu").classList.remove("open");};
 window.toggleMenu=()=>{document.getElementById("user-menu").classList.toggle("open");};
 document.addEventListener("click",e=>{const m=document.getElementById("user-menu");if(m&&!m.contains(e.target)&&!e.target.closest("[onclick*=toggleMenu]"))m.classList.remove("open");});
+// Handle redirect result first (for iOS Safari sign-in flow)
+getRedirectResult(auth).then(result=>{
+  if(result?.user){
+    // User just signed in via redirect — onAuthStateChanged will handle the rest
+    console.log("Redirect sign-in successful");
+  }
+}).catch(e=>{
+  console.error("Redirect result error:",e);
+});
+
 onAuthStateChanged(auth,async user=>{
   try{document.getElementById("loading").style.display="none";}catch(e){}
   if(user){
@@ -346,7 +410,7 @@ onAuthStateChanged(auth,async user=>{
     document.getElementById("menu-email").textContent=user.email||"";
     S.log=await fbLoad();
     const prof=await fbLoadProfile();
-    S.profile=Object.assign({stats:[],phase:"recomp",heightCm:null,neckCm:null},prof);
+    S.profile=Object.assign({stats:[],phase:"recomp",heightCm:null,neckCm:null,activity:1.375},prof);
     if(!S.profile.stats)S.profile.stats=[];
     render();
   }else{
@@ -393,9 +457,9 @@ const WORKOUTS=[
      warmupSets:[{label:"WU1",pct:"BW",reps:5,rest:"60s"},{label:"WU2",pct:"BW+light",reps:3,rest:"90s"}],
      workingSets:[{label:"Set 1",repRange:"4&ndash;6",rest:"3 min"},{label:"Set 2",repRange:"6&ndash;8",rest:"3 min"},{label:"Set 3",repRange:"8&ndash;10",rest:"2 min"}],
      cue:"Dead hang start. Pull elbows to hips. Pause chin over bar. KING of the program."},
-    {id:"B2",name:"Weighted Chin-Ups (supinated)",type:"RPT",restSecs:[180,120],isWeightedBW:true,
+    {id:"B2",name:"Weighted Chin-Ups (supinated)",type:"RPT",restSecs:[180,120,90],isWeightedBW:true,
      warmupSets:[{label:"WU1",pct:"BW",reps:4,rest:"90s"}],
-     workingSets:[{label:"Set 1",repRange:"5&ndash;7",rest:"3 min"},{label:"Set 2",repRange:"7&ndash;9",rest:"2 min"}],
+     workingSets:[{label:"Set 1",repRange:"5&ndash;7",rest:"3 min"},{label:"Set 2",repRange:"7&ndash;9",rest:"2 min"},{label:"Set 3",repRange:"9&ndash;11",rest:"90s"}],
      cue:"Palms facing you. Full dead hang. Bicep peak and back together."},
     {id:"B3",name:"DB Bent-Over Row (1 arm)",type:"RPT",restSecs:[180,120,90],
      warmupSets:[{label:"WU1",pct:"40%",reps:8,rest:"60s"},{label:"WU2",pct:"65%",reps:5,rest:"90s"}],
@@ -476,7 +540,9 @@ function startSessionClock(){
     if(S.sessionStartTs){
       S.sessionElapsedMs=Date.now()-S.sessionStartTs;
       const badge=document.getElementById("session-clock");
-      if(badge)badge.textContent="&#x23F1; "+fmtDuration(S.sessionElapsedMs);
+      if(badge)badge.innerHTML="&#x23F1; "+fmtDuration(S.sessionElapsedMs);
+      const sb=document.getElementById("sb-duration");
+      if(sb)sb.textContent=fmtDuration(S.sessionElapsedMs);
     }
   },1000);
 }
@@ -563,11 +629,12 @@ function navyBF(waistCm,neckCm,heightCm){
   return Math.max(3,Math.min(50,parseFloat(bf.toFixed(1))));
 }
 function kinoIdeal(heightCm){return heightCm*0.447;}
-function calcMacros(weightKg,bf,phase){
+function calcMacros(weightKg,bf,phase,activityMult){
   if(!weightKg||!bf)return null;
   const lbmKg=weightKg*(1-bf/100);
   const bmr=370+(21.6*lbmKg);
-  const maint=bmr*1.375;
+  const mult=activityMult||1.375;
+  const maint=bmr*mult;
   let cal;
   if(phase==="cut")cal=maint*0.85;
   else if(phase==="bulk")cal=maint+300;
@@ -645,9 +712,9 @@ function wuTbl(sets,exId,ts,ps){
       <span class="wu-label">${s.label}</span>
       <span class="wu-pct" style="font-size:11px;color:#9a9690">${s.pct} &bull; ${s.reps}r &bull; ${s.rest}</span>
       <input class="wu-input${ck?" wu-filled":""}" type="number" inputmode="decimal" placeholder="kg" value="${ck}"
-        oninput="updWu('${exId}',${i},'kg',this.value)" style="width:56px;font-size:13px;padding:4px 7px;border:1.5px solid ${ck?"#2a7a3a":"#d0ccc4"};border-radius:6px;background:#f8f6f2;font-family:inherit;font-weight:600;outline:none"/>
+        oninput="updWu('${exId}',${i},'kg',this.value)" style="width:56px;font-size:16px;padding:6px 7px;min-height:32px;border:1.5px solid ${ck?"#2a7a3a":"#d0ccc4"};border-radius:6px;background:#f8f6f2;font-family:inherit;font-weight:600;outline:none"/>
       <input class="wu-input${cr?" wu-filled":""}" type="number" inputmode="numeric" placeholder="reps" value="${cr}"
-        oninput="updWu('${exId}',${i},'reps',this.value)" style="width:56px;font-size:13px;padding:4px 7px;border:1.5px solid ${cr?"#2a7a3a":"#d0ccc4"};border-radius:6px;background:#f8f6f2;font-family:inherit;font-weight:600;outline:none"/>
+        oninput="updWu('${exId}',${i},'reps',this.value)" style="width:56px;font-size:16px;padding:6px 7px;min-height:32px;border:1.5px solid ${cr?"#2a7a3a":"#d0ccc4"};border-radius:6px;background:#f8f6f2;font-family:inherit;font-weight:600;outline:none"/>
       ${prevBadgeHtml}
     </div>`;
   }).join("");
@@ -664,23 +731,27 @@ function wuTbl(sets,exId,ts,ps){
 }
 
 function sRow(ws,i,ex,pd,td){
-  const ck=td?.[i]?.kg||"",cr=td?.[i]?.reps||"",has=ck||cr;
+  const sd=td?.[i]||{};
+  const ck=sd.kg||"",cr=sd.reps||"",isChecked=!!sd.checked,has=ck||cr;
   const tSecs=ex.restSecs?.[i]||60;
-  const timerKey=`${ex.id}_${i}`;
+  const timerKey=ex.id+"_"+i;
   const t=S.activeTimers[timerKey];
-  let btnTxt="Rest",btnCls="btn-rest";
-  if(t){if(t.status==="running"){btnTxt=fmtSecs(Math.max(0,t.secs));btnCls="btn-rest running";}else{btnTxt="Done &#x2713;";btnCls="btn-rest done";}}
-  return`<div class="set-row${has?" has-entry":""}">
+  let chkCls="set-check",chkLabel="";
+  if(isChecked){
+    if(t&&t.status==="running"){chkCls="set-check timing";chkLabel=fmtSecs(Math.max(0,t.secs));}
+    else{chkCls="set-check checked";chkLabel="";}
+  }
+  return`<div class="set-row${has?" has-entry":""}${isChecked?" checked-set":""}">
     <div class="set-row-top">
       <span class="set-label">${ws.label}</span>
       <span class="set-target">Target: <strong>${ws.repRange}</strong></span>
       <span class="set-rest-lbl">rest: ${ws.rest}</span>
     </div>
     <div class="set-inputs">
-      <input class="set-input${ck?" filled":""}" type="number" inputmode="decimal" placeholder="kg" value="${ck}" oninput="updSet('${ex.id}',${i},'kg',this.value)"/>
-      <input class="set-input${cr?" filled":""}" type="number" inputmode="numeric" placeholder="reps" value="${cr}" oninput="updSet('${ex.id}',${i},'reps',this.value)"/>
+      <input class="set-input${ck?" filled":""}" type="number" inputmode="decimal" placeholder="kg" value="${ck}" oninput="updSet('${ex.id}',${i},'kg',this.value)"${isChecked?' disabled':''}/>
+      <input class="set-input${cr?" filled":""}" type="number" inputmode="numeric" placeholder="reps" value="${cr}" oninput="updSet('${ex.id}',${i},'reps',this.value)"${isChecked?' disabled':''}/>
       ${prevBadge(pd?.[i]?.kg,pd?.[i]?.reps,ws.repRange)}
-      <button id="rtbtn_${ex.id}_${i}" class="${btnCls}" onclick="startRest('${ex.id}',${i},${tSecs})">${btnTxt}</button>
+      <button id="rtbtn_${ex.id}_${i}" class="${chkCls}" onclick="toggleSetCheck('${ex.id}',${i},${tSecs})" style="${chkLabel?'font-size:11px':''}" aria-label="${isChecked?'Uncheck':'Check'} set">${chkLabel}</button>
     </div>
   </div>`;
 }
@@ -698,18 +769,22 @@ function exCard(ex,ts,ps){
       const dKey="drop",dTd=td?.["drop"],dPd=pd?.["drop"];
       const dCk=dTd?.kg||"",dCr=dTd?.reps||"",dHas=dCk||dCr;
       const dTimer=S.activeTimers[ex.id+"_drop"];
-      let dBtnTxt="Rest",dBtnCls="btn-rest";
-      if(dTimer){if(dTimer.status==="running"){dBtnTxt=fmtSecs(Math.max(0,dTimer.secs));dBtnCls="btn-rest running";}else{dBtnTxt="Done &#x2713;";dBtnCls="btn-rest done";}}
-      return`<div class="drop-set-row${dHas?" has-entry":""}">
+      const dropChecked=!!(td?.["drop"]?.checked);
+      let dChkCls="set-check",dChkLabel="";
+      if(dropChecked){
+        if(dTimer&&dTimer.status==="running"){dChkCls="set-check timing";dChkLabel=fmtSecs(Math.max(0,dTimer.secs));}
+        else{dChkCls="set-check checked";}
+      }
+      return`<div class="drop-set-row${dHas?" has-entry":""}${dropChecked?" checked-set":""}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
           <span style="font-size:13px;font-weight:700;color:#b03030;min-width:56px">DROP</span>
           <span style="font-size:12px;color:#b03030;background:#fff0f0;border:1px solid #f0b0b0;border-radius:4px;padding:2px 8px;font-weight:600">${ex.dropSet}</span>
         </div>
         <div class="set-inputs">
-          <input class="set-input${dCk?" filled":""}" type="number" inputmode="decimal" placeholder="kg" value="${dCk}" oninput="updDrop('${ex.id}','kg',this.value)" style="border-color:${dCk?"#2a7a3a":"#f0b0b0"}"/>
-          <input class="set-input${dCr?" filled":""}" type="number" inputmode="numeric" placeholder="reps" value="${dCr}" oninput="updDrop('${ex.id}','reps',this.value)" style="border-color:${dCr?"#2a7a3a":"#f0b0b0"}"/>
+          <input class="set-input${dCk?" filled":""}" type="number" inputmode="decimal" placeholder="kg" value="${dCk}" oninput="updDrop('${ex.id}','kg',this.value)" style="border-color:${dCk?"#2a7a3a":"#f0b0b0"}"${dropChecked?' disabled':''}/>
+          <input class="set-input${dCr?" filled":""}" type="number" inputmode="numeric" placeholder="reps" value="${dCr}" oninput="updDrop('${ex.id}','reps',this.value)" style="border-color:${dCr?"#2a7a3a":"#f0b0b0"}"${dropChecked?' disabled':''}/>
           ${dPd?.kg||dPd?.reps?`<span class="prev-tag">${dPd.kg?dPd.kg+"kg":""} ${dPd.reps?dPd.reps+" reps":""} &uarr;prev</span>`:""}
-          <button id="rtbtn_${ex.id}_drop" class="${dBtnCls}" onclick="startRest('${ex.id}','drop',45)">${dBtnTxt}</button>
+          <button id="rtbtn_${ex.id}_drop" class="${dChkCls}" onclick="toggleSetCheck('${ex.id}','drop',45)" style="${dChkLabel?'font-size:11px':''}" aria-label="${dropChecked?'Uncheck':'Check'} drop set">${dChkLabel}</button>
         </div>
       </div>`;
     })();
@@ -753,6 +828,12 @@ function rWorkout(){
 
   // Session in progress or finished
   const vol=calcVolume(ts,wk.exercises);
+  // Sticky session bar — only when actively training (not just viewing finished)
+  const stickyBar=(isActive&&!fin)?`<div class="session-bar">
+    <div class="session-bar-item"><div class="session-bar-num" id="sb-duration">${fmtDuration(S.sessionElapsedMs)}</div><div class="session-bar-lbl">Time</div></div>
+    <div class="session-bar-item"><div class="session-bar-num">${vol}<span style="font-size:11px;color:#9a9690;font-weight:400"> kg</span></div><div class="session-bar-lbl">Volume</div></div>
+    <div class="session-bar-item"><div class="session-bar-num">${n}</div><div class="session-bar-lbl">Sets</div></div>
+  </div>`:"";
   const sessionHeader=`<div class="session-header">
     <div class="session-title" style="color:${wk.accent}">${wk.name} &mdash; ${wk.label}</div>
     <div class="session-sub">${wk.subtitle}</div>
@@ -777,7 +858,7 @@ function rWorkout(){
   // Clear button ONLY for in-progress (not finished) sessions with data
   if(!fin&&n>0)bb+=S.confirmClear?`<div class="confirm-row"><button class="btn-confirm" onclick="clearSession()">Yes, clear</button><button class="btn-cancel" onclick="setCC(false)">Cancel</button></div>`:`<button class="btn-clear" onclick="setCC(true)">Clear session log</button>`;
 
-  return sel+sessionHeader+warmup+rptNote+cards+`<div class="bottom-btns">${bb}</div>`;
+  return stickyBar+sel+sessionHeader+warmup+rptNote+cards+`<div class="bottom-btns">${bb}</div>`;
 }
 
 /* ═══ RENDER HISTORY ═══ */
@@ -854,6 +935,7 @@ function rStats(){
   </div>`;
 
   /* PROFILE CARD */
+  const actLvl=S.profile.activity||1.375;
   const profileCard=`<div class="stats-card">
     <div class="stats-card-title">&#x1F4CF; Your Profile</div>
     <div class="stats-input-row">
@@ -861,7 +943,16 @@ function rStats(){
       <div class="stats-field"><div class="stats-label">Neck (${mLbl()})</div><input class="stats-input" id="inp-neck" type="number" inputmode="decimal" placeholder="${mLbl()}" value="${nCm?cmToM(nCm):""}" /></div>
       <button class="btn-log-stats" onclick="saveProfile()">Save</button>
     </div>
-    <div style="font-size:11px;color:#9a9690;line-height:1.7;font-style:italic">Neck: wrap tape just below the Adam&rsquo;s apple. These rarely change &mdash; set once.</div>
+    <div class="stats-field" style="margin-top:14px;width:100%">
+      <div class="stats-label" style="margin-bottom:6px">Activity Level (TDEE multiplier)</div>
+      <select id="inp-activity" onchange="saveActivity(this.value)" style="width:100%;background:#f8f6f2;border:1.5px solid #d0ccc4;border-radius:7px;color:#1a1814;font-size:14px;padding:10px 12px;font-family:inherit;font-weight:600;outline:none">
+        <option value="1.2"${actLvl==1.2?" selected":""}>Sedentary &mdash; 1.2 (desk job, no exercise)</option>
+        <option value="1.375"${actLvl==1.375?" selected":""}>Lightly Active &mdash; 1.375 (3x/week training)</option>
+        <option value="1.55"${actLvl==1.55?" selected":""}>Moderately Active &mdash; 1.55 (active job + training)</option>
+        <option value="1.725"${actLvl==1.725?" selected":""}>Highly Active &mdash; 1.725 (physical job + 5x/week)</option>
+      </select>
+    </div>
+    <div style="font-size:11px;color:#9a9690;line-height:1.7;font-style:italic;margin-top:10px">Neck: wrap tape just below the Adam&rsquo;s apple. Activity level affects your calorie target instantly.</div>
   </div>`;
 
   /* LOG CHECK-IN */
@@ -928,7 +1019,7 @@ function rStats(){
       const eNeck=latest.neckCm||nCm,eHt=latest.heightCm||hCm;
       const bf=eHt&&eNeck?navyBF(latest.waistCm,eNeck,eHt):null;
       if(!bf)return`<div style="font-size:13px;color:#9a9690;text-align:center;padding:12px">Save your profile (height + neck) to enable macro targets.</div>`;
-      const m=calcMacros(latest.weightKg,bf,S.profile.phase);
+      const m=calcMacros(latest.weightKg,bf,S.profile.phase,S.profile.activity||1.375);
       if(!m)return"";
       return`<div class="macro-phase-lbl ${S.profile.phase}">Phase: ${phaseDesc[S.profile.phase]}</div>
       <div class="macro-grid">
@@ -937,7 +1028,7 @@ function rStats(){
         <div class="macro-tile"><div class="macro-lbl">Carbs</div><div class="macro-val">${m.carbs}g</div><div class="macro-sub">remaining cals</div></div>
         <div class="macro-tile"><div class="macro-lbl">Fats</div><div class="macro-val">${m.fat}g</div><div class="macro-sub">20% of cals</div></div>
       </div>
-      <div style="font-size:11px;color:#9a9690;margin-top:10px;line-height:1.6">Maintenance: ${m.maint} kcal &bull; LBM: ${kgToW(m.lbmKg)}${wLbl()} &bull; Based on Katch-McArdle &times; 1.375</div>`;
+      <div style="font-size:11px;color:#9a9690;margin-top:10px;line-height:1.6">Maintenance: ${m.maint} kcal &bull; LBM: ${kgToW(m.lbmKg)}${wLbl()} &bull; Katch-McArdle &times; ${(S.profile.activity||1.375).toFixed(3)}</div>`;
     })()}
   </div>`;
 
@@ -1033,6 +1124,19 @@ function rStats(){
     </div>`;
   }
 
+  // 7-day rolling average smoother — averages the last N points around each value
+  function rollingAvg(arr, window){
+    if(!arr||arr.length<2)return arr;
+    return arr.map((v,i)=>{
+      if(v==null)return null;
+      const start=Math.max(0,i-Math.floor(window/2));
+      const end=Math.min(arr.length,i+Math.ceil(window/2)+1);
+      const slice=arr.slice(start,end).filter(x=>x!=null);
+      if(!slice.length)return v;
+      return parseFloat((slice.reduce((a,b)=>a+b,0)/slice.length).toFixed(1));
+    });
+  }
+
   // Graph 1: Recomp — split into two charts so each has its own Y scale
   if(stats.length>1&&hCm&&nCm){
     const pts=stats.slice(-12);
@@ -1049,20 +1153,25 @@ function rStats(){
         series:[{values:leans,label:"Lean Mass ("+wLbl()+")",color:"#2a7a3a"}],
         labels:lbls, yUnit:wLbl(), dashed:[false], cardId:"lean"
       });
-      // Chart 1b: Fat mass + bodyweight (want fat going DOWN, weight stable/down)
+      // Chart 1b: Fat mass + bodyweight — apply 7-day rolling avg if enough data
+      const useSmooth=weights.length>=4;
+      const smoothW=useSmooth?rollingAvg(weights,7):weights;
+      const smoothF=useSmooth?rollingAvg(fats,7):fats;
       chartsHtml+=buildChart({
-        title:"&#x1F525; Fat Mass vs Body Weight",
+        title:"&#x1F525; Fat Mass vs Body Weight"+(useSmooth?" <span style=\"color:#9a9690;font-weight:400;font-size:9px;text-transform:none;letter-spacing:0\">(7-day avg)</span>":""),
         series:[
-          {values:weights,label:"Body Weight ("+wLbl()+")",color:"#c8960a"},
-          {values:fats,label:"Fat Mass ("+wLbl()+")",color:"#c03030"}
+          {values:smoothW,label:"Body Weight ("+wLbl()+")",color:"#c8960a"},
+          {values:smoothF,label:"Fat Mass ("+wLbl()+")",color:"#c03030"}
         ],
         labels:lbls, yUnit:wLbl(), dashed:[false,true], cardId:"fat"
       });
       // Chart 1c: Waist circumference trend
       if(waists.filter(Boolean).length>1){
+        const useSmoothW=waists.length>=4;
+        const smoothWaist=useSmoothW?rollingAvg(waists,7):waists;
         chartsHtml+=buildChart({
-          title:"&#x1F4D0; Waist Circumference",
-          series:[{values:waists,label:"Waist ("+mLbl()+")",color:"#1a7fa8"}],
+          title:"&#x1F4D0; Waist Circumference"+(useSmoothW?" <span style=\"color:#9a9690;font-weight:400;font-size:9px;text-transform:none;letter-spacing:0\">(7-day avg)</span>":""),
+          series:[{values:smoothWaist,label:"Waist ("+mLbl()+")",color:"#1a7fa8"}],
           labels:lbls, yUnit:mLbl(), dashed:[false], cardId:"waist"
         });
       }
@@ -1305,6 +1414,28 @@ window.startWorkout=()=>{
 
 window.startRest=(exId,setIdx,secs)=>{startRestTimer(exId,setIdx,secs);};
 
+window.toggleSetCheck=async(exId,setIdx,restSecs)=>{
+  const sk=getActiveSessionKey();
+  if(!sk)return;
+  if(!S.log[sk])S.log[sk]={};
+  if(!S.log[sk][exId])S.log[sk][exId]={};
+  if(!S.log[sk][exId][setIdx])S.log[sk][exId][setIdx]={};
+  const currentlyChecked=!!S.log[sk][exId][setIdx].checked;
+  if(currentlyChecked){
+    S.log[sk][exId][setIdx].checked=false;
+    const timerKey=exId+"_"+setIdx;
+    if(S.activeTimers[timerKey]){
+      if(S.activeTimers[timerKey].interval)clearInterval(S.activeTimers[timerKey].interval);
+      delete S.activeTimers[timerKey];
+    }
+  } else {
+    S.log[sk][exId][setIdx].checked=true;
+    if(restSecs)startRestTimer(exId,setIdx,restSecs);
+  }
+  await fbSave(sk,S.log[sk]);
+  render();
+};
+
 window.updWu=async(eid,i,field,val)=>{
   const sk=getActiveSessionKey();
   if(!sk)return;
@@ -1392,6 +1523,12 @@ window.delSess=async k=>{
   await fbDel(k);delete S.log[k];S.confirmDeleteKey=null;S.openEx["h_"+k]=false;showToast("Session deleted");render();
 };
 
+window.saveActivity=async(val)=>{
+  S.profile.activity=parseFloat(val)||1.375;
+  await fbSaveProfile(S.profile);
+  showToast("Activity level updated");
+  render();
+};
 window.saveProfile=async()=>{
   const hEl=document.getElementById("inp-height"),nEl=document.getElementById("inp-neck");
   if(!hEl||!nEl)return;
@@ -1422,7 +1559,7 @@ window.logStats=async()=>{
 };
 
 window.setTonnageFilter=id=>{S.tonnageFilter=id;render();};
-window.showTonnageTip=(date,vol)=>{};
+window.showTonnageTip=(date,vol)=>{const tip=document.getElementById("chart-tooltip");if(!tip)return;document.getElementById("chart-tooltip-label").textContent=date;document.getElementById("chart-tooltip-value").textContent=vol+"kg total";document.getElementById("chart-tooltip-value").style.color="#c8960a";document.getElementById("chart-tooltip-series").textContent="Session volume";tip.style.left="50%";tip.style.top="50%";tip.style.transform="translate(-50%,-50%)";tip.style.display="block";clearTimeout(tip._t);tip._t=setTimeout(()=>{tip.style.display="none";tip.style.transform="";},3000);};
 window.showChartTip=(evt,cardId,text,seriesLabel,color)=>{
   const tip=document.getElementById("chart-tooltip");
   if(!tip)return;
@@ -1479,7 +1616,7 @@ window.generateWeeklyReport=()=>{
   const latestLeanKg=latestFatKg?parseFloat((latest.weightKg-latestFatKg).toFixed(1)):null;
   const prevFatKg=prevBF?parseFloat((prev.weightKg*prevBF/100).toFixed(1)):null;
   const prevLeanKg=prevFatKg?parseFloat((prev.weightKg-prevFatKg).toFixed(1)):null;
-  const macros=latestBF?calcMacros(latest.weightKg,latestBF,phase):null;
+  const macros=latestBF?calcMacros(latest.weightKg,latestBF,phase,S.profile.activity||1.375):null;
   const kino=latest&&hCm?{ideal:kinoIdeal(hCm),ratio:(latest.waistCm/hCm*100).toFixed(1),excessIn:Math.max(0,(latest.waistCm-kinoIdeal(hCm))/2.54).toFixed(1)}:null;
 
   // Workout sessions this week (last 7 days)
