@@ -1027,22 +1027,38 @@ function rStats(){
     </div>`;
   }
 
-  // Graph 1: Recomp — only if body stats logged with profile
+  // Graph 1: Recomp — split into two charts so each has its own Y scale
   if(stats.length>1&&hCm&&nCm){
     const pts=stats.slice(-12);
     const leans=pts.map(s=>{const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;const bf=navyBF(s.waistCm,sNeck,sHt);return bf?parseFloat((s.weightKg*(1-bf/100)).toFixed(1)):null;});
     const fats=pts.map(s=>{const sNeck=s.neckCm||nCm,sHt=s.heightCm||hCm;const bf=navyBF(s.waistCm,sNeck,sHt);return bf?parseFloat((s.weightKg*bf/100).toFixed(1)):null;});
+    const weights=pts.map(s=>parseFloat(kgToW(s.weightKg)));
+    const waists=pts.map(s=>parseFloat(cmToM(s.waistCm)));
     const lbls=pts.map(s=>s.date);
-    const allR=[...leans,...fats].filter(Boolean);
-    if(allR.length>1){
+    if(leans.filter(Boolean).length>1){
+      // Chart 1a: Lean mass trend (most important — want this going UP)
       chartsHtml+=buildChart({
-        title:"&#x1F4C8; Recomposition Trend",
+        title:"&#x1F4AA; Lean Mass Trend",
+        series:[{values:leans,label:"Lean Mass ("+wLbl()+")",color:"#2a7a3a"}],
+        labels:lbls, yUnit:wLbl(), dashed:[false], cardId:"lean"
+      });
+      // Chart 1b: Fat mass + bodyweight (want fat going DOWN, weight stable/down)
+      chartsHtml+=buildChart({
+        title:"&#x1F525; Fat Mass vs Body Weight",
         series:[
-          {values:leans,label:"Lean Mass ("+wLbl()+")",color:"#2a7a3a"},
+          {values:weights,label:"Body Weight ("+wLbl()+")",color:"#c8960a"},
           {values:fats,label:"Fat Mass ("+wLbl()+")",color:"#c03030"}
         ],
-        labels:lbls, yUnit:wLbl(), dashed:[false,true], cardId:"recomp"
+        labels:lbls, yUnit:wLbl(), dashed:[false,true], cardId:"fat"
       });
+      // Chart 1c: Waist circumference trend
+      if(waists.filter(Boolean).length>1){
+        chartsHtml+=buildChart({
+          title:"&#x1F4D0; Waist Circumference",
+          series:[{values:waists,label:"Waist ("+mLbl()+")",color:"#1a7fa8"}],
+          labels:lbls, yUnit:mLbl(), dashed:[false], cardId:"waist"
+        });
+      }
     }
   }
 
